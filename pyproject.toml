@@ -1,0 +1,140 @@
+[project]
+name = "mopidy-smartplaylists"
+description = "Mopidy extension for generating smart playlists based on track properties"
+readme = "README.md"
+requires-python = ">= 3.13"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Chris Powell", email = "chris@code.unbl.ink" }]
+classifiers = [
+    "Environment :: No Input/Output (Daemon)",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Sound/Audio :: Players",
+]
+dynamic = ["version"]
+dependencies = [
+    "mopidy >= 4.0.0",
+    "pykka >= 4.1",
+    "tornado >= 6.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/secstate/mopidy-smartplaylists"
+
+[project.entry-points."mopidy.ext"]
+smartplaylists = "mopidy_smartplaylists:Extension"
+
+
+[build-system]
+requires = ["setuptools >= 78", "setuptools-scm >= 8.2"]
+build-backend = "setuptools.build_meta"
+
+
+[dependency-groups]
+dev = [
+    "tox",
+    { include-group = "ruff" },
+    { include-group = "tests" },
+    { include-group = "typing" },
+]
+ruff = ["ruff"]
+tests = ["pytest", "pytest-cov"]
+typing = ["pyright"]
+
+
+[tool.coverage.paths]
+source = ["src/", "*/site-packages/"]
+
+[tool.coverage.run]
+source_pkgs = ["mopidy_smartplaylists"]
+
+[tool.coverage.report]
+show_missing = true
+
+
+[tool.pyright]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false
+reportPrivateImportUsage = false
+
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "error:::mopidy_smartplaylists",
+]
+
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "D",
+    "D203",
+    "D213",
+    "FIX002",
+    "G004",
+    "S101",
+    "TD002",
+    "TD003",
+    "COM812",
+    "ISC001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "ANN",
+    "ARG",
+    "D",
+    "FBT003",
+    "PLR2004",
+    "S101",
+    "SLF001",
+]
+
+
+[tool.setuptools.package-data]
+"*" = ["*.conf"]
+
+
+[tool.setuptools_scm]
+
+
+[tool.tox]
+env_list = [
+    "3.13",
+    "3.14",
+    "pyright",
+    "ruff-check",
+    "ruff-format",
+]
+
+[tool.tox.env_run_base]
+package = "wheel"
+wheel_build_env = ".pkg"
+dependency_groups = ["tests"]
+commands = [
+    [
+        "pytest",
+        "--cov",
+        "--basetemp={envtmpdir}",
+        { replace = "posargs", extend = true },
+    ],
+]
+
+[tool.tox.env.pyright]
+dependency_groups = ["typing"]
+commands = [["pyright", "{posargs:src}"]]
+
+[tool.tox.env.ruff-check]
+skip_install = true
+dependency_groups = ["ruff"]
+commands = [["ruff", "check", "{posargs:.}"]]
+
+[tool.tox.env.ruff-format]
+skip_install = true
+dependency_groups = ["ruff"]
+commands = [["ruff", "format", "--check", "--diff", "{posargs:.}"]]

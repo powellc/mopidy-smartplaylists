@@ -1,0 +1,8 @@
+_commit: v2.3.0
+_src_path: gh:mopidy/mopidy-ext-template
+author_email: chris@code.unbl.ink
+author_full_name: Chris Powell
+dist_name: mopidy-smartplaylists
+ext_name: smartplaylists
+github_username: secstate
+short_description: Mopidy extension for generating smart playlists based on track properties

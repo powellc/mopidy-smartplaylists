@@ -1,0 +1,16 @@
+name: Release
+
+on:
+  release:
+    types:
+      - released
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hynek/build-and-inspect-python-package@v2
+      - uses: pypa/gh-action-pypi-publish@v1.12.4
