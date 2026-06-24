@@ -1,9 +1,16 @@
+from __future__ import annotations
+
 import json
 import logging
+from typing import TYPE_CHECKING, cast
 
 import tornado.web
-from mopidy.config import Config
-from mopidy.core import CoreProxy
+
+if TYPE_CHECKING:
+    from mopidy_smartplaylists.compat import Config, CoreProxy
+
+if TYPE_CHECKING:
+    from mopidy.models import Playlist
 
 from mopidy_smartplaylists.generators import (
     build_album_mix,
@@ -35,13 +42,15 @@ class DecadeMixHandler(tornado.web.RequestHandler):
             self.write({"playlist": None, "tracks": 0})
             return
         playlist = save_smart_playlist(self.core, self.prefix, f"{decade}s Mix", tracks)
-        self.write({
-            "playlist": {
-                "name": playlist.name if playlist else None,
-                "uri": playlist.uri if playlist else None,
-                "tracks": len(tracks),
-            },
-        })
+        self.write(
+            {
+                "playlist": {
+                    "name": playlist.name if playlist else None,
+                    "uri": playlist.uri if playlist else None,
+                    "tracks": len(tracks),
+                },
+            }
+        )
 
 
 class GenreMixHandler(tornado.web.RequestHandler):
@@ -61,13 +70,15 @@ class GenreMixHandler(tornado.web.RequestHandler):
             self.write({"playlist": None, "tracks": 0})
             return
         playlist = save_smart_playlist(self.core, self.prefix, f"{genre} Mix", tracks)
-        self.write({
-            "playlist": {
-                "name": playlist.name if playlist else None,
-                "uri": playlist.uri if playlist else None,
-                "tracks": len(tracks),
-            },
-        })
+        self.write(
+            {
+                "playlist": {
+                    "name": playlist.name if playlist else None,
+                    "uri": playlist.uri if playlist else None,
+                    "tracks": len(tracks),
+                },
+            }
+        )
 
 
 class ArtistMixHandler(tornado.web.RequestHandler):
@@ -87,13 +98,15 @@ class ArtistMixHandler(tornado.web.RequestHandler):
             self.write({"playlist": None, "tracks": 0})
             return
         playlist = save_smart_playlist(self.core, self.prefix, f"{artist} Mix", tracks)
-        self.write({
-            "playlist": {
-                "name": playlist.name if playlist else None,
-                "uri": playlist.uri if playlist else None,
-                "tracks": len(tracks),
-            },
-        })
+        self.write(
+            {
+                "playlist": {
+                    "name": playlist.name if playlist else None,
+                    "uri": playlist.uri if playlist else None,
+                    "tracks": len(tracks),
+                },
+            }
+        )
 
 
 class AlbumMixHandler(tornado.web.RequestHandler):
@@ -112,15 +125,21 @@ class AlbumMixHandler(tornado.web.RequestHandler):
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
             return
-        name = tracks[0].album.name if tracks[0].album and tracks[0].album.name else "Album"
+        name = (
+            tracks[0].album.name
+            if tracks[0].album and tracks[0].album.name
+            else "Album"
+        )
         playlist = save_smart_playlist(self.core, self.prefix, f"{name} Mix", tracks)
-        self.write({
-            "playlist": {
-                "name": playlist.name if playlist else None,
-                "uri": playlist.uri if playlist else None,
-                "tracks": len(tracks),
-            },
-        })
+        self.write(
+            {
+                "playlist": {
+                    "name": playlist.name if playlist else None,
+                    "uri": playlist.uri if playlist else None,
+                    "tracks": len(tracks),
+                },
+            }
+        )
 
 
 class InstantMixHandler(tornado.web.RequestHandler):
@@ -149,14 +168,18 @@ class InstantMixHandler(tornado.web.RequestHandler):
                     seed_name = t.name
                 break
 
-        playlist = save_smart_playlist(self.core, self.prefix, f"Instant Mix: {seed_name}", tracks)
-        self.write({
-            "playlist": {
-                "name": playlist.name if playlist else None,
-                "uri": playlist.uri if playlist else None,
-                "tracks": len(tracks),
-            },
-        })
+        playlist = save_smart_playlist(
+            self.core, self.prefix, f"Instant Mix: {seed_name}", tracks
+        )
+        self.write(
+            {
+                "playlist": {
+                    "name": playlist.name if playlist else None,
+                    "uri": playlist.uri if playlist else None,
+                    "tracks": len(tracks),
+                },
+            }
+        )
 
 
 class RefreshHandler(tornado.web.RequestHandler):
@@ -176,18 +199,21 @@ class StatusHandler(tornado.web.RequestHandler):
 
     def get(self) -> None:
         result = self.core.playlists.as_list().get()
-        smart = [p for p in result if p.uri and "smartplaylists" in p.uri]
-        self.write({
-            "smart_playlists": [
-                {
-                    "name": p.name,
-                    "uri": p.uri,
-                    "tracks": len(p.tracks) if p.tracks else 0,
-                }
-                for p in smart
-            ],
-            "count": len(smart),
-        })
+        result_typed = cast("list[Playlist]", result)
+        smart = [p for p in result_typed if p.uri and "smartplaylists" in p.uri]
+        self.write(
+            {
+                "smart_playlists": [
+                    {
+                        "name": p.name,
+                        "uri": p.uri,
+                        "tracks": len(p.tracks) if p.tracks else 0,
+                    }
+                    for p in smart
+                ],
+                "count": len(smart),
+            }
+        )
 
 
 def app_factory(config: Config, core: CoreProxy) -> list[tuple]:

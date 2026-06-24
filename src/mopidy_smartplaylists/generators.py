@@ -1,23 +1,32 @@
+from __future__ import annotations
+
 import logging
 import re
+from typing import TYPE_CHECKING, cast
 
-from mopidy.core import CoreProxy
-from mopidy.models import Playlist, Track, TrackField
+from mopidy.models import Playlist, Track
+
+if TYPE_CHECKING:
+    from mopidy_smartplaylists.compat import CoreProxy, Query, SearchField, Uri
 
 logger = logging.getLogger(__name__)
 
 
 def parse_decade(decade_str: str) -> str:
-    decade_str = decade_str.strip()
-    if len(decade_str) == 4:
-        return decade_str[:3] + "*"
-    if decade_str.endswith("s"):
+    decade_str = decade_str.strip().rstrip("s")
+    if len(decade_str) >= 3:
         return decade_str[:3] + "*"
     return decade_str
 
 
+def _search(core: CoreProxy, field: str, value: str) -> list[Track]:
+    query = cast("Query[SearchField]", {field: [value]})
+    result = core.library.search(query).get()
+    return _extract_tracks(result)
+
+
 def build_decade_mix(core: CoreProxy, decade: str) -> list[Track]:
-    query = {TrackField.DATE: [parse_decade(decade)]}
+    query = cast("Query[SearchField]", {"date": [parse_decade(decade)]})
     result = core.library.search(query).get()
     tracks = _extract_tracks(result)
     logger.info("Found %d tracks for decade %s", len(tracks), decade)
@@ -25,30 +34,22 @@ def build_decade_mix(core: CoreProxy, decade: str) -> list[Track]:
 
 
 def build_genre_mix(core: CoreProxy, genre: str) -> list[Track]:
-    query = {TrackField.GENRE: [genre]}
-    result = core.library.search(query).get()
-    tracks = _extract_tracks(result)
-    logger.info("Found %d tracks for genre %s", len(tracks), genre)
-    return tracks
+    return _search(core, "genre", genre)
 
 
 def build_artist_mix(core: CoreProxy, artist: str) -> list[Track]:
-    query = {TrackField.ARTIST: [artist]}
-    result = core.library.search(query).get()
-    tracks = _extract_tracks(result)
-    logger.info("Found %d tracks for artist %s", len(tracks), artist)
-    return tracks
+    return _search(core, "artist", artist)
 
 
 def build_album_mix(core: CoreProxy, album_uri: str) -> list[Track]:
-    tracks = core.library.lookup([album_uri]).get()
+    tracks = core.library.lookup(cast("list[Uri]", [album_uri])).get()
     flat = _flatten_lookup(tracks)
     logger.info("Found %d tracks for album %s", len(flat), album_uri)
     return flat
 
 
 def build_instant_mix(core: CoreProxy, track_uri: str, limit: int = 50) -> list[Track]:
-    lookup_result = core.library.lookup([track_uri]).get()
+    lookup_result = core.library.lookup(cast("list[Uri]", [track_uri])).get()
     seed_tracks = _flatten_lookup(lookup_result)
     if not seed_tracks:
         logger.warning("No track found for URI: %s", track_uri)
@@ -61,16 +62,14 @@ def build_instant_mix(core: CoreProxy, track_uri: str, limit: int = 50) -> list[
     if seed.genre:
         genres = [g.strip() for g in seed.genre.split("/") if g.strip()]
     if seed.artists:
-        for artist_ref in seed.artists:
-            if artist_ref.name:
-                artists.append(artist_ref.name)
+        artists.extend(a_ref.name for a_ref in seed.artists if a_ref.name)
 
     similar: dict[str, Track] = {}
 
     for genre in genres:
-        query = {TrackField.GENRE: [genre]}
-        result = core.library.search(query).get()
-        for batch in result:
+        g_query = cast("Query[SearchField]", {"genre": [genre]})
+        genre_result = core.library.search(g_query).get()
+        for batch in genre_result:
             for t in batch.tracks:
                 if t.uri and t.uri != track_uri:
                     similar[t.uri] = t
@@ -78,9 +77,9 @@ def build_instant_mix(core: CoreProxy, track_uri: str, limit: int = 50) -> list[
     for artist in artists:
         if len(similar) >= limit:
             break
-        query = {TrackField.ARTIST: [artist]}
-        result = core.library.search(query).get()
-        for batch in result:
+        a_query = cast("Query[SearchField]", {"artist": [artist]})
+        artist_result = core.library.search(a_query).get()
+        for batch in artist_result:
             for t in batch.tracks:
                 if t.uri and t.uri != track_uri:
                     similar[t.uri] = t
@@ -97,16 +96,16 @@ def save_smart_playlist(
     tracks: list[Track],
 ) -> Playlist | None:
     playlist_name = f"{prefix} {name}"
-    uri = f"mopidy:smartplaylists:{_sanitize_name(name)}"
+    uri: str = f"mopidy:smartplaylists:{_sanitize_name(name)}"
 
-    existing = core.playlists.lookup(uri).get()
+    existing = core.playlists.lookup(cast("Uri", uri)).get()
     if existing:
         core.playlists.delete(existing.uri).get()
 
     playlist = Playlist(
         name=playlist_name,
-        uri=uri,
-        tracks=tracks,
+        uri=cast("Uri", uri),
+        tracks=tuple(tracks),
     )
     saved = core.playlists.save(playlist).get()
     logger.info("Saved smart playlist: %s (%d tracks)", playlist_name, len(tracks))
@@ -141,14 +140,14 @@ def refresh_smart_playlists(core: CoreProxy, config_dict: dict) -> None:
                 save_smart_playlist(core, prefix, f"{artist} Mix", tracks)
 
 
-def _extract_tracks(search_result) -> list[Track]:
+def _extract_tracks(search_result: list) -> list[Track]:
     tracks: list[Track] = []
     for batch in search_result:
         tracks.extend(batch.tracks)
     return tracks
 
 
-def _flatten_lookup(lookup_result: dict[str, list[Track]]) -> list[Track]:
+def _flatten_lookup(lookup_result: dict[Uri, list[Track]]) -> list[Track]:
     tracks: list[Track] = []
     for uri_tracks in lookup_result.values():
         tracks.extend(uri_tracks)

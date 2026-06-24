@@ -1,6 +1,5 @@
 from unittest import mock
 
-import pytest
 from mopidy.models import Artist, Playlist, SearchResult, Track
 
 from mopidy_smartplaylists.generators import (
@@ -44,7 +43,10 @@ class TestSanitizeName:
 
 class TestExtractTracks:
     def test_extracts_from_search_results(self):
-        tracks = [Track(uri="dummy:1", name="Track 1"), Track(uri="dummy:2", name="Track 2")]
+        tracks = [
+            Track(uri="dummy:1", name="Track 1"),
+            Track(uri="dummy:2", name="Track 2"),
+        ]
         results = [SearchResult(uri="dummy:search", tracks=tracks)]
         assert _extract_tracks(results) == tracks
 

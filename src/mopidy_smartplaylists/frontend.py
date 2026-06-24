@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 import pykka
-from mopidy.config import Config
-from mopidy.core import CoreListener, CoreProxy
+from mopidy.core import CoreListener
 
 from mopidy_smartplaylists.generators import refresh_smart_playlists
+
+if TYPE_CHECKING:
+    from mopidy_smartplaylists.compat import Config, CoreProxy
 
 logger = logging.getLogger(__name__)
 

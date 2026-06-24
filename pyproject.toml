@@ -2,7 +2,7 @@
 name = "mopidy-smartplaylists"
 description = "Mopidy extension for generating smart playlists based on track properties"
 readme = "README.md"
-requires-python = ">= 3.13"
+requires-python = ">= 3.10"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Chris Powell", email = "chris@code.unbl.ink" }]
 classifiers = [
@@ -14,9 +14,9 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "mopidy >= 4.0.0",
-    "pykka >= 4.1",
-    "tornado >= 6.4",
+    "mopidy >= 3.0.0",
+    "pykka >= 2.0.1",
+    "tornado >= 4.4",
 ]
 
 [project.urls]
@@ -54,7 +54,7 @@ show_missing = true
 
 
 [tool.pyright]
-pythonVersion = "3.13"
+pythonVersion = "3.10"
 typeCheckingMode = "standard"
 reportMissingTypeStubs = false
 reportPrivateImportUsage = false
@@ -67,7 +67,7 @@ filterwarnings = [
 
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -105,6 +105,9 @@ ignore = [
 
 [tool.tox]
 env_list = [
+    "3.10",
+    "3.11",
+    "3.12",
     "3.13",
     "3.14",
     "pyright",
