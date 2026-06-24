@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Playlists</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --card: #0f3460;
+    --accent: #e94560;
+    --text: #eaeaea;
+    --muted: #8892b0;
+    --border: #233554;
+    --success: #4ade80;
+    --radius: 8px;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+  .sidebar {
+    width: 300px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+  }
+  .sidebar h2 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+  .sidebar .playlist-item {
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius);
+    background: var(--card);
+    font-size: 0.875rem;
+  }
+  .sidebar .playlist-item .count {
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+  .sidebar .empty {
+    color: var(--muted);
+    font-size: 0.875rem;
+    font-style: italic;
+  }
+  .main {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+  }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .header h1 { font-size: 1.5rem; font-weight: 600; }
+  .header .actions { display: flex; gap: 0.5rem; align-items: center; }
+  .toast {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .toast.success { background: #14532d; color: #bbf7d0; border: 1px solid var(--success); }
+  .toast.error { background: #450a0a; color: #fecaca; border: 1px solid #f87171; }
+  .toast.info { background: #1e3a5f; color: #bfdbfe; border: 1px solid #60a5fa; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1rem;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .card h3 { font-size: 1rem; font-weight: 600; color: var(--accent); }
+  .card p { font-size: 0.8125rem; color: var(--muted); }
+  .card .field { display: flex; gap: 0.5rem; }
+  .card .field input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .card .field input:focus { border-color: var(--accent); }
+  .card .field input::placeholder { color: var(--muted); }
+  .card .result {
+    font-size: 0.8125rem;
+    min-height: 1.25rem;
+    word-break: break-all;
+  }
+  .card .result.success { color: var(--success); }
+  .card .result.error { color: #f87171; }
+  .btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    white-space: nowrap;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover:not(:disabled) { opacity: 0.9; }
+  .btn-secondary { background: var(--card); color: var(--text); }
+  .btn-secondary:hover:not(:disabled) { opacity: 0.9; }
+  @media (max-width: 768px) {
+    body { flex-direction: column; }
+    .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 200px; }
+    .main { padding: 1rem; }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div id="toast" class="toast"></div>
+
+<aside class="sidebar">
+  <h2>Smart Playlists</h2>
+  <div id="playlist-list"><div class="empty">Loading...</div></div>
+</aside>
+
+<main class="main">
+  <div class="header">
+    <h1>Smart Playlists</h1>
+    <div class="actions">
+      <button class="btn btn-secondary" onclick="refreshPlaylists()">Refresh All</button>
+      <button class="btn btn-secondary" onclick="loadStatus()">Reload List</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Decade Mix</h3>
+      <p>Generate a playlist of tracks from a given decade.</p>
+      <div class="field">
+        <input id="decade-input" type="text" placeholder="e.g. 1980" />
+        <button class="btn btn-primary" onclick="generate('decade', 'decade-input', 'decade-result', { decade: val })">Generate</button>
+      </div>
+      <div id="decade-result" class="result"></div>
+    </div>
+
+    <div class="card">
+      <h3>Genre Mix</h3>
+      <p>Generate a playlist of tracks in a given genre.</p>
+      <div class="field">
+        <input id="genre-input" type="text" placeholder="e.g. Jazz" />
+        <button class="btn btn-primary" onclick="generate('genre', 'genre-input', 'genre-result', { genre: val })">Generate</button>
+      </div>
+      <div id="genre-result" class="result"></div>
+    </div>
+
+    <div class="card">
+      <h3>Artist Mix</h3>
+      <p>Generate a playlist of tracks by a given artist.</p>
+      <div class="field">
+        <input id="artist-input" type="text" placeholder="e.g. Miles Davis" />
+        <button class="btn btn-primary" onclick="generate('artist', 'artist-input', 'artist-result', { artist: val })">Generate</button>
+      </div>
+      <div id="artist-result" class="result"></div>
+    </div>
+
+    <div class="card">
+      <h3>Album Mix</h3>
+      <p>Generate a playlist from an album URI.</p>
+      <div class="field">
+        <input id="album-input" type="text" placeholder="e.g. local:album:123" />
+        <button class="btn btn-primary" onclick="generate('album', 'album-input', 'album-result', { uri: val })">Generate</button>
+      </div>
+      <div id="album-result" class="result"></div>
+    </div>
+
+    <div class="card">
+      <h3>Instant Mix</h3>
+      <p>Generate a mix based on a track URI (same genre + similar artists).</p>
+      <div class="field" style="flex-direction: column; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem;">
+          <input id="instant-uri-input" type="text" placeholder="e.g. local:track:456" style="flex: 2;" />
+          <input id="instant-limit-input" type="number" value="50" min="1" max="500" style="flex: 0 0 80px;" />
+          <button class="btn btn-primary" onclick="generateInstantMix()">Generate</button>
+        </div>
+      </div>
+      <div id="instant-result" class="result"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const BASE = window.location.pathname.replace(/\/+$/, "");
+
+function showToast(msg, type) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast " + type + " show";
+  setTimeout(() => t.classList.remove("show"), 3500);
+}
+
+async function api(method, path, body) {
+  const opts = { method, headers: {} };
+  if (body) {
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(BASE + path, opts);
+  return res.json();
+}
+
+async function loadStatus() {
+  const list = document.getElementById("playlist-list");
+  try {
+    const data = await api("GET", "/status");
+    if (!data.smart_playlists || data.smart_playlists.length === 0) {
+      list.innerHTML = '<div class="empty">No smart playlists yet</div>';
+      return;
+    }
+    list.innerHTML = data.smart_playlists.map(p =>
+      `<div class="playlist-item">
+        <div>${esc(p.name)}</div>
+        <div class="count">${p.tracks} track${p.tracks === 1 ? "" : "s"}</div>
+      </div>`
+    ).join("");
+  } catch {
+    list.innerHTML = '<div class="empty">Could not load playlists</div>';
+  }
+}
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s || "";
+  return d.innerHTML;
+}
+
+async function generate(endpoint, inputId, resultId, bodyFn) {
+  const input = document.getElementById(inputId);
+  const result = document.getElementById(resultId);
+  const val = input.value.trim();
+  if (!val) {
+    result.className = "result error";
+    result.textContent = "Enter a value";
+    return;
+  }
+  result.textContent = "Generating...";
+  result.className = "result";
+  const body = Object.fromEntries(Object.entries(bodyFn).map(([k]) => [k, val]));
+  try {
+    const data = await api("POST", "/" + endpoint, body);
+    if (data.playlist) {
+      result.className = "result success";
+      result.textContent = 'Created "' + data.playlist.name + '" (' + data.playlist.tracks + " tracks)";
+      loadStatus();
+    } else {
+      result.textContent = "No tracks found";
+    }
+  } catch (e) {
+    result.className = "result error";
+    result.textContent = "Error: " + e;
+  }
+}
+
+async function generateInstantMix() {
+  const uriInput = document.getElementById("instant-uri-input");
+  const limitInput = document.getElementById("instant-limit-input");
+  const result = document.getElementById("instant-result");
+  const uri = uriInput.value.trim();
+  const limit = parseInt(limitInput.value, 10) || 50;
+  if (!uri) {
+    result.className = "result error";
+    result.textContent = "Enter a track URI";
+    return;
+  }
+  result.textContent = "Generating...";
+  result.className = "result";
+  try {
+    const data = await api("POST", "/instant-mix", { uri, limit });
+    if (data.playlist) {
+      result.className = "result success";
+      result.textContent = 'Created "' + data.playlist.name + '" (' + data.playlist.tracks + " tracks)";
+      loadStatus();
+    } else {
+      result.textContent = "No similar tracks found";
+    }
+  } catch (e) {
+    result.className = "result error";
+    result.textContent = "Error: " + e;
+  }
+}
+
+async function refreshPlaylists() {
+  showToast("Refreshing all configured playlists...", "info");
+  try {
+    await api("POST", "/refresh", {});
+    showToast("Playlists refreshed", "success");
+    loadStatus();
+  } catch (e) {
+    showToast("Refresh failed: " + e, "error");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", loadStatus);
+</script>
+</body>
+</html>

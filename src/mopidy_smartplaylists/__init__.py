@@ -37,6 +37,14 @@ class Extension(ext.Extension):
             },
         )
 
+        registry.add(
+            "http:static",
+            {
+                "name": self.ext_name,
+                "path": str(pathlib.Path(__file__).parent / "static"),
+            },
+        )
+
         from mopidy_smartplaylists.frontend import SmartPlaylistsFrontend
 
         registry.add("frontend", SmartPlaylistsFrontend)
