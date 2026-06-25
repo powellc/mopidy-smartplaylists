@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import re
 from typing import TYPE_CHECKING, cast
 
@@ -38,6 +39,7 @@ def _mix_tracks(
     if not tracks:
         return []
     if max_per_album > 0:
+        random.shuffle(tracks)
         seen: dict[str, int] = {}
         result: list[Track] = []
         for t in tracks:
@@ -50,6 +52,7 @@ def _mix_tracks(
         tracks = result
     if max_tracks > 0:
         tracks = tracks[:max_tracks]
+    random.shuffle(tracks)
     return tracks
 
 
@@ -161,10 +164,14 @@ def save_smart_playlist(
         filename = f"{_safe_filename(playlist_name)}.m3u8"
         filepath = os.path.join(playlist_dir, filename)
         try:
-            with open(filepath, "w") as f:
-                f.write("#EXTM3U\n")
-                for t in tracks:
-                    if t.uri:
+                with open(filepath, "w") as f:
+                    f.write("#EXTM3U\n")
+                    for t in tracks:
+                        if not t.uri:
+                            continue
+                        name = (t.name or "").replace("\n", " ").strip()
+                        length = int(t.length / 1000) if t.length else -1
+                        f.write(f"#EXTINF:{length},{name}\n")
                         f.write(f"{t.uri}\n")
         except Exception:
             logger.exception("Failed to write M3U8 file %s", filepath)
