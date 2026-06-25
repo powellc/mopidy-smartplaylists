@@ -158,7 +158,7 @@ def save_smart_playlist(
     playlist_name = f"{prefix} {name}"
 
     if playlist_dir:
-        filename = f"{_sanitize_name(playlist_name)}.m3u8"
+        filename = f"{_safe_filename(playlist_name)}.m3u8"
         filepath = os.path.join(playlist_dir, filename)
         try:
             with open(filepath, "w") as f:
@@ -269,3 +269,7 @@ def _flatten_lookup(lookup_result: dict[Uri, list[Track]]) -> list[Track]:
 
 def _sanitize_name(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "_", name).lower()
+
+
+def _safe_filename(name: str) -> str:
+    return re.sub(r"[\0/]", "", name).strip() or "_"
