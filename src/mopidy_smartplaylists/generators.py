@@ -30,7 +30,9 @@ def _search(
     except Exception:
         logger.exception("Search failed for %s=%s", field, value)
         return []
-    return _extract_tracks(result)
+    tracks = _extract_tracks(result)
+    random.shuffle(tracks)
+    return tracks
 
 
 def _mix_tracks(
@@ -163,6 +165,7 @@ def build_instant_mix(
                     similar[t.uri] = t
 
     tracks = list(similar.values())[:limit]
+    random.shuffle(tracks)
     logger.info("Instant mix: found %d tracks similar to %s", len(tracks), seed.name)
     return tracks
 
