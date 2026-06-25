@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 _smart_queue_enabled: bool = False
 _recent_uris: deque = deque(maxlen=50)
 _cooldown_counter: int = 0
+_frontend_instance: SmartPlaylistsFrontend | None = None
 
 
 class SmartPlaylistsFrontend(pykka.ThreadingActor, CoreListener):
@@ -31,8 +32,9 @@ class SmartPlaylistsFrontend(pykka.ThreadingActor, CoreListener):
         self._cooldown = _parse_int(section, "smart_queue_cooldown", 3)
         self._variety = _parse_float(section, "smart_queue_variety", 0.15)
         dedup = _parse_int(section, "smart_queue_dedup", 50)
-        global _recent_uris
+        global _recent_uris, _frontend_instance
         _recent_uris = deque(maxlen=dedup)
+        _frontend_instance = self
         if _parse_bool(section, "smart_queue_enabled", False):
             global _smart_queue_enabled
             _smart_queue_enabled = True
@@ -47,7 +49,8 @@ class SmartPlaylistsFrontend(pykka.ThreadingActor, CoreListener):
             logger.debug("No smart playlist recipes configured")
 
     def on_stop(self) -> None:
-        pass
+        global _frontend_instance
+        _frontend_instance = None
 
     def playlists_loaded(self) -> None:
         section = dict(self.config.get("smartplaylists", {}))
@@ -57,6 +60,12 @@ class SmartPlaylistsFrontend(pykka.ThreadingActor, CoreListener):
             refresh_smart_playlists(self.core, section)
 
     def track_playback_started(self, track) -> None:
+        self._refill_queue()
+
+    def tracklist_changed(self) -> None:
+        self._refill_queue()
+
+    def _refill_queue(self) -> None:
         global _cooldown_counter
         if not _smart_queue_enabled:
             return
@@ -69,14 +78,19 @@ class SmartPlaylistsFrontend(pykka.ThreadingActor, CoreListener):
             return
         if len(tl_tracks) >= self._min_tracks:
             return
-        if track and track.uri:
-            _recent_uris.append(track.uri)
+        try:
+            current = self.core.playback.get_current_track().get()
+        except Exception:
+            current = None
+        if not current or not current.uri:
+            return
+        _recent_uris.append(current.uri)
         needed = self._refill_to - len(tl_tracks)
         if needed <= 0:
             return
         try:
             tracks = build_smart_queue_tracks(
-                self.core, track.uri, needed,
+                self.core, current.uri, needed,
                 uris=self._uris,
                 variety_chance=self._variety,
             )
@@ -103,6 +117,8 @@ def toggle_smart_queue(enable: bool) -> None:
     global _smart_queue_enabled
     _smart_queue_enabled = enable
     logger.info("Smart queue %s", "enabled" if enable else "disabled")
+    if enable and _frontend_instance:
+        _frontend_instance._refill_queue()
 
 
 def smart_queue_status() -> dict:
