@@ -250,7 +250,7 @@ class TestStatusHandler:
 
         app = tornado.web.Application(
             [
-                (r"/status", StatusHandler, {"core": core}),
+                (r"/status", StatusHandler, {"core": core, "prefix": "[Smart]"}),
             ]
         )
         request = tornado.httputil.HTTPServerRequest(
@@ -260,7 +260,7 @@ class TestStatusHandler:
             connection=mock.Mock(),
             headers=tornado.httputil.HTTPHeaders(),
         )
-        handler = StatusHandler(app, request, core=core)
+        handler = StatusHandler(app, request, core=core, prefix="[Smart]")
         handler.write = mock.Mock()
         handler.get()
         data = handler.write.call_args[0][0]

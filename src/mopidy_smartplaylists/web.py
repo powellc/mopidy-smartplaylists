@@ -217,8 +217,9 @@ class RefreshHandler(tornado.web.RequestHandler):
 
 
 class StatusHandler(tornado.web.RequestHandler):
-    def initialize(self, core: CoreProxy) -> None:
+    def initialize(self, core: CoreProxy, prefix: str) -> None:
         self.core = core
+        self.prefix = prefix
 
     def get(self) -> None:
         try:
@@ -233,7 +234,7 @@ class StatusHandler(tornado.web.RequestHandler):
             })
             return
         result_typed = cast("list[Playlist]", result)
-        smart = [p for p in result_typed if p.uri and "smartplaylists" in p.uri]
+        smart = [p for p in result_typed if p.name and p.name.startswith(self.prefix)]
         self.write(
             {
                 "smart_playlists": [
@@ -269,5 +270,5 @@ def app_factory(config: Config, core: CoreProxy) -> list[tuple]:
         (r"/instant-mix", InstantMixHandler,
          {"core": core, "prefix": prefix, "uris": uris}),
         (r"/refresh", RefreshHandler, {"core": core, "config": config}),
-        (r"/status", StatusHandler, {"core": core}),
+        (r"/status", StatusHandler, {"core": core, "prefix": prefix}),
     ]
