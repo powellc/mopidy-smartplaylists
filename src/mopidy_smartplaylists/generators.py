@@ -21,13 +21,21 @@ def parse_decade(decade_str: str) -> str:
 
 def _search(core: CoreProxy, field: str, value: str) -> list[Track]:
     query = cast("Query[SearchField]", {field: [value]})
-    result = core.library.search(query).get()
+    try:
+        result = core.library.search(query).get()
+    except Exception:
+        logger.exception("Search failed for %s=%s", field, value)
+        return []
     return _extract_tracks(result)
 
 
 def build_decade_mix(core: CoreProxy, decade: str) -> list[Track]:
     query = cast("Query[SearchField]", {"date": [parse_decade(decade)]})
-    result = core.library.search(query).get()
+    try:
+        result = core.library.search(query).get()
+    except Exception:
+        logger.exception("Decade search failed for %s", decade)
+        return []
     tracks = _extract_tracks(result)
     logger.info("Found %d tracks for decade %s", len(tracks), decade)
     return tracks
@@ -42,14 +50,22 @@ def build_artist_mix(core: CoreProxy, artist: str) -> list[Track]:
 
 
 def build_album_mix(core: CoreProxy, album_uri: str) -> list[Track]:
-    tracks = core.library.lookup(cast("list[Uri]", [album_uri])).get()
+    try:
+        tracks = core.library.lookup(cast("list[Uri]", [album_uri])).get()
+    except Exception:
+        logger.exception("Album lookup failed for %s", album_uri)
+        return []
     flat = _flatten_lookup(tracks)
     logger.info("Found %d tracks for album %s", len(flat), album_uri)
     return flat
 
 
 def build_instant_mix(core: CoreProxy, track_uri: str, limit: int = 50) -> list[Track]:
-    lookup_result = core.library.lookup(cast("list[Uri]", [track_uri])).get()
+    try:
+        lookup_result = core.library.lookup(cast("list[Uri]", [track_uri])).get()
+    except Exception:
+        logger.exception("Track lookup failed for %s", track_uri)
+        return []
     seed_tracks = _flatten_lookup(lookup_result)
     if not seed_tracks:
         logger.warning("No track found for URI: %s", track_uri)
@@ -68,7 +84,11 @@ def build_instant_mix(core: CoreProxy, track_uri: str, limit: int = 50) -> list[
 
     for genre in genres:
         g_query = cast("Query[SearchField]", {"genre": [genre]})
-        genre_result = core.library.search(g_query).get()
+        try:
+            genre_result = core.library.search(g_query).get()
+        except Exception:
+            logger.exception("Genre search failed for %s", genre)
+            continue
         for batch in genre_result:
             for t in batch.tracks:
                 if t.uri and t.uri != track_uri:
@@ -78,7 +98,11 @@ def build_instant_mix(core: CoreProxy, track_uri: str, limit: int = 50) -> list[
         if len(similar) >= limit:
             break
         a_query = cast("Query[SearchField]", {"artist": [artist]})
-        artist_result = core.library.search(a_query).get()
+        try:
+            artist_result = core.library.search(a_query).get()
+        except Exception:
+            logger.exception("Artist search failed for %s", artist)
+            continue
         for batch in artist_result:
             for t in batch.tracks:
                 if t.uri and t.uri != track_uri:
@@ -98,16 +122,27 @@ def save_smart_playlist(
     playlist_name = f"{prefix} {name}"
     uri: str = f"mopidy:smartplaylists:{_sanitize_name(name)}"
 
-    existing = core.playlists.lookup(cast("Uri", uri)).get()
+    try:
+        existing = core.playlists.lookup(cast("Uri", uri)).get()
+    except Exception:
+        logger.exception("Playlist lookup failed for %s", uri)
+        existing = None
     if existing:
-        core.playlists.delete(existing.uri).get()
+        try:
+            core.playlists.delete(existing.uri).get()
+        except Exception:
+            logger.exception("Failed to delete existing playlist %s", existing.uri)
 
     playlist = Playlist(
         name=playlist_name,
         uri=cast("Uri", uri),
         tracks=tuple(tracks),
     )
-    saved = core.playlists.save(playlist).get()
+    try:
+        saved = core.playlists.save(playlist).get()
+    except Exception:
+        logger.exception("Failed to save playlist %s", playlist_name)
+        return None
     logger.info("Saved smart playlist: %s (%d tracks)", playlist_name, len(tracks))
     return saved
 
@@ -119,15 +154,23 @@ def refresh_smart_playlists(core: CoreProxy, config_dict: dict) -> None:
     if decades_raw:
         decades = [d.strip() for d in decades_raw.split(",") if d.strip()]
         for decade in decades:
-            tracks = build_decade_mix(core, decade)
+            try:
+                tracks = build_decade_mix(core, decade)
+            except Exception:
+                logger.exception("Failed to build decade mix for %s", decade)
+                continue
             if tracks:
                 save_smart_playlist(core, prefix, f"{decade}s Mix", tracks)
 
     genres_raw = config_dict.get("genres", "")
     if genres_raw:
-        genres = [g.strip() for g in genres_raw.split(",") if g.strip()]
+        genres = [d.strip() for d in genres_raw.split(",") if d.strip()]
         for genre in genres:
-            tracks = build_genre_mix(core, genre)
+            try:
+                tracks = build_genre_mix(core, genre)
+            except Exception:
+                logger.exception("Failed to build genre mix for %s", genre)
+                continue
             if tracks:
                 save_smart_playlist(core, prefix, f"{genre} Mix", tracks)
 
@@ -135,7 +178,11 @@ def refresh_smart_playlists(core: CoreProxy, config_dict: dict) -> None:
     if artists_raw:
         artists = [a.strip() for a in artists_raw.split(",") if a.strip()]
         for artist in artists:
-            tracks = build_artist_mix(core, artist)
+            try:
+                tracks = build_artist_mix(core, artist)
+            except Exception:
+                logger.exception("Failed to build artist mix for %s", artist)
+                continue
             if tracks:
                 save_smart_playlist(core, prefix, f"{artist} Mix", tracks)
 

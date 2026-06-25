@@ -189,7 +189,13 @@ class RefreshHandler(tornado.web.RequestHandler):
 
     def post(self) -> None:
         section = self.config.get("smartplaylists", {})
-        refresh_smart_playlists(self.core, section)
+        try:
+            refresh_smart_playlists(self.core, section)
+        except Exception:
+            logger.exception("Refresh of smart playlists failed")
+            self.set_status(500)
+            self.write({"error": "Refresh failed"})
+            return
         self.write({"status": "ok"})
 
 
