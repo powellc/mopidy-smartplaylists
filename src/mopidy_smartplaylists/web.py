@@ -283,8 +283,8 @@ def _parse_search_uris(config: Config) -> list[Uri] | None:
 
 
 def _parse_playlist_dir(config: Config) -> str | None:
-    raw = config.get("smartplaylists", {}).get("playlist_dir", "")
-    return raw.strip() or None
+    raw = config.get("smartplaylists", {}).get("playlist_dir")
+    return raw.strip() if raw else None
 
 
 def app_factory(config: Config, core: CoreProxy) -> list[tuple]:
