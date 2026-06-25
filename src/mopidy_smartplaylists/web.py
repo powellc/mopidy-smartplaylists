@@ -265,7 +265,7 @@ class StatusHandler(tornado.web.RequestHandler):
 
     def get(self) -> None:
         try:
-            result = self.core.playlists.as_list().get()
+            refs = self.core.playlists.as_list().get()
         except Exception:
             logger.exception("Failed to list playlists")
             self.set_status(500)
@@ -275,21 +275,22 @@ class StatusHandler(tornado.web.RequestHandler):
                 "count": 0,
             })
             return
-        result_typed = cast("list[Playlist]", result)
-        smart = [p for p in result_typed if p.name and p.name.startswith(self.prefix)]
-        self.write(
-            {
-                "smart_playlists": [
-                    {
-                        "name": p.name,
-                        "uri": p.uri,
-                        "tracks": len(p.tracks) if p.tracks else 0,
-                    }
-                    for p in smart
-                ],
-                "count": len(smart),
-            }
-        )
+        smart = []
+        for ref in refs:
+            if ref.name and ref.name.startswith(self.prefix):
+                try:
+                    pl = self.core.playlists.lookup(cast("Uri", ref.uri)).get()
+                except Exception:
+                    logger.exception("Failed to lookup playlist %s", ref.uri)
+                    continue
+                if pl is None:
+                    continue
+                smart.append({
+                    "name": pl.name,
+                    "uri": pl.uri,
+                    "tracks": len(pl.tracks) if pl.tracks else 0,
+                })
+        self.write({"smart_playlists": smart, "count": len(smart)})
 
 
 def _parse_search_uris(config: Config) -> list[Uri] | None:

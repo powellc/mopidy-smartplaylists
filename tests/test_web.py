@@ -3,7 +3,7 @@ from unittest import mock
 
 import tornado.testing
 import tornado.web
-from mopidy.models import Playlist, Track
+from mopidy.models import Playlist, Ref, Track
 
 from mopidy_smartplaylists.web import (
     AlbumMixHandler,
@@ -236,17 +236,23 @@ class TestStatusHandler:
     def test_returns_smart_playlists(self):
         core = mock.Mock()
         core.playlists.as_list.return_value.get.return_value = [
-            Playlist(
-                name="[Smart] Jazz Mix",
-                uri="mopidy:smartplaylists:jazz_mix",
-                tracks=[Track(uri="dummy:1", name="T")],
-            ),
-            Playlist(
-                name="Normal Playlist",
-                uri="mopidy:playlist:normal",
-                tracks=[],
-            ),
+            Ref(uri="mopidy:smartplaylists:jazz_mix", name="[Smart] Jazz Mix", type="playlist"),
+            Ref(uri="mopidy:playlist:normal", name="Normal Playlist", type="playlist"),
         ]
+
+        def lookup_side_effect(uri):
+            result = mock.Mock()
+            playlists = {
+                "mopidy:smartplaylists:jazz_mix": Playlist(
+                    name="[Smart] Jazz Mix",
+                    uri="mopidy:smartplaylists:jazz_mix",
+                    tracks=[Track(uri="dummy:1", name="T")],
+                ),
+            }
+            result.get.return_value = playlists.get(uri)
+            return result
+
+        core.playlists.lookup.side_effect = lookup_side_effect
 
         app = tornado.web.Application(
             [
