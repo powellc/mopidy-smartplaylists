@@ -151,8 +151,6 @@ def build_instant_mix(
                     similar[t.uri] = t
 
     for artist in artists:
-        if len(similar) >= limit:
-            break
         a_query = cast("Query[SearchField]", {"artist": [artist]})
         try:
             artist_result = core.library.search(a_query, uris=uris).get()
@@ -164,8 +162,9 @@ def build_instant_mix(
                 if t.uri and t.uri != track_uri:
                     similar[t.uri] = t
 
-    tracks = list(similar.values())[:limit]
+    tracks = list(similar.values())
     random.shuffle(tracks)
+    tracks = tracks[:limit]
     logger.info("Instant mix: found %d tracks similar to %s", len(tracks), seed.name)
     return tracks
 
