@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, cast
 import tornado.web
 
 if TYPE_CHECKING:
-    from mopidy_smartplaylists.compat import Config, CoreProxy
+    from mopidy_smartplaylists.compat import Config, CoreProxy, Uri
 
 if TYPE_CHECKING:
     from mopidy.models import Playlist
@@ -26,9 +26,12 @@ logger = logging.getLogger(__name__)
 
 
 class DecadeMixHandler(tornado.web.RequestHandler):
-    def initialize(self, core: CoreProxy, prefix: str) -> None:
+    def initialize(
+        self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
+    ) -> None:
         self.core = core
         self.prefix = prefix
+        self.uris = uris
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -37,7 +40,7 @@ class DecadeMixHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write({"error": "Missing 'decade' in request body"})
             return
-        tracks = build_decade_mix(self.core, decade)
+        tracks = build_decade_mix(self.core, decade, uris=self.uris)
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
             return
@@ -54,9 +57,12 @@ class DecadeMixHandler(tornado.web.RequestHandler):
 
 
 class GenreMixHandler(tornado.web.RequestHandler):
-    def initialize(self, core: CoreProxy, prefix: str) -> None:
+    def initialize(
+        self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
+    ) -> None:
         self.core = core
         self.prefix = prefix
+        self.uris = uris
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -65,7 +71,7 @@ class GenreMixHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write({"error": "Missing 'genre' in request body"})
             return
-        tracks = build_genre_mix(self.core, genre)
+        tracks = build_genre_mix(self.core, genre, uris=self.uris)
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
             return
@@ -82,9 +88,12 @@ class GenreMixHandler(tornado.web.RequestHandler):
 
 
 class ArtistMixHandler(tornado.web.RequestHandler):
-    def initialize(self, core: CoreProxy, prefix: str) -> None:
+    def initialize(
+        self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
+    ) -> None:
         self.core = core
         self.prefix = prefix
+        self.uris = uris
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -93,7 +102,7 @@ class ArtistMixHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write({"error": "Missing 'artist' in request body"})
             return
-        tracks = build_artist_mix(self.core, artist)
+        tracks = build_artist_mix(self.core, artist, uris=self.uris)
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
             return
@@ -143,9 +152,12 @@ class AlbumMixHandler(tornado.web.RequestHandler):
 
 
 class InstantMixHandler(tornado.web.RequestHandler):
-    def initialize(self, core: CoreProxy, prefix: str) -> None:
+    def initialize(
+        self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
+    ) -> None:
         self.core = core
         self.prefix = prefix
+        self.uris = uris
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -155,12 +167,17 @@ class InstantMixHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write({"error": "Missing 'uri' in request body"})
             return
-        tracks = build_instant_mix(self.core, track_uri, limit)
+        tracks = build_instant_mix(self.core, track_uri, limit, uris=self.uris)
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
             return
 
-        lookup_result = self.core.library.lookup([track_uri]).get()
+        try:
+            lookup_result = self.core.library.lookup([track_uri]).get()
+        except Exception:
+            logger.exception("Track lookup failed for %s", track_uri)
+            self.write({"playlist": None, "tracks": 0})
+            return
         seed_name = "Instant Mix"
         for uri_tracks in lookup_result.values():
             for t in uri_tracks:
@@ -204,7 +221,17 @@ class StatusHandler(tornado.web.RequestHandler):
         self.core = core
 
     def get(self) -> None:
-        result = self.core.playlists.as_list().get()
+        try:
+            result = self.core.playlists.as_list().get()
+        except Exception:
+            logger.exception("Failed to list playlists")
+            self.set_status(500)
+            self.write({
+                "error": "Failed to list playlists",
+                "smart_playlists": [],
+                "count": 0,
+            })
+            return
         result_typed = cast("list[Playlist]", result)
         smart = [p for p in result_typed if p.uri and "smartplaylists" in p.uri]
         self.write(
@@ -222,15 +249,25 @@ class StatusHandler(tornado.web.RequestHandler):
         )
 
 
+def _parse_search_uris(config: Config) -> list[Uri] | None:
+    raw = config.get("smartplaylists", {}).get("search_uris", "")
+    if raw:
+        uris = cast("list[Uri]", [u.strip() for u in raw.split(",") if u.strip()])
+        return uris or None
+    return None
+
+
 def app_factory(config: Config, core: CoreProxy) -> list[tuple]:
     prefix = config.get("smartplaylists", {}).get("playlist_prefix", "[Smart]")
+    uris = _parse_search_uris(config)
 
     return [
-        (r"/decade", DecadeMixHandler, {"core": core, "prefix": prefix}),
-        (r"/genre", GenreMixHandler, {"core": core, "prefix": prefix}),
-        (r"/artist", ArtistMixHandler, {"core": core, "prefix": prefix}),
+        (r"/decade", DecadeMixHandler, {"core": core, "prefix": prefix, "uris": uris}),
+        (r"/genre", GenreMixHandler, {"core": core, "prefix": prefix, "uris": uris}),
+        (r"/artist", ArtistMixHandler, {"core": core, "prefix": prefix, "uris": uris}),
         (r"/album", AlbumMixHandler, {"core": core, "prefix": prefix}),
-        (r"/instant-mix", InstantMixHandler, {"core": core, "prefix": prefix}),
+        (r"/instant-mix", InstantMixHandler,
+         {"core": core, "prefix": prefix, "uris": uris}),
         (r"/refresh", RefreshHandler, {"core": core, "config": config}),
         (r"/status", StatusHandler, {"core": core}),
     ]
