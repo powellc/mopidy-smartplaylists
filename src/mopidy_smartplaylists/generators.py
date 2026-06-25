@@ -32,8 +32,30 @@ def _search(
     return _extract_tracks(result)
 
 
+def _mix_tracks(
+    tracks: list[Track], max_tracks: int = 0, max_per_album: int = 0,
+) -> list[Track]:
+    if not tracks:
+        return []
+    if max_per_album > 0:
+        seen: dict[str, int] = {}
+        result: list[Track] = []
+        for t in tracks:
+            key = t.album.uri if t.album and t.album.uri else str(id(t))
+            count = seen.get(key, 0)
+            if count >= max_per_album:
+                continue
+            seen[key] = count + 1
+            result.append(t)
+        tracks = result
+    if max_tracks > 0:
+        tracks = tracks[:max_tracks]
+    return tracks
+
+
 def build_decade_mix(
     core: CoreProxy, decade: str, uris: list[Uri] | None = None,
+    max_tracks: int = 0, max_per_album: int = 0,
 ) -> list[Track]:
     query = cast("Query[SearchField]", {"date": [parse_decade(decade)]})
     try:
@@ -41,21 +63,23 @@ def build_decade_mix(
     except Exception:
         logger.exception("Decade search failed for %s", decade)
         return []
-    tracks = _extract_tracks(result)
+    tracks = _mix_tracks(_extract_tracks(result), max_tracks, max_per_album)
     logger.info("Found %d tracks for decade %s", len(tracks), decade)
     return tracks
 
 
 def build_genre_mix(
     core: CoreProxy, genre: str, uris: list[Uri] | None = None,
+    max_tracks: int = 0, max_per_album: int = 0,
 ) -> list[Track]:
-    return _search(core, "genre", genre, uris=uris)
+    return _mix_tracks(_search(core, "genre", genre, uris=uris), max_tracks, max_per_album)
 
 
 def build_artist_mix(
     core: CoreProxy, artist: str, uris: list[Uri] | None = None,
+    max_tracks: int = 0, max_per_album: int = 0,
 ) -> list[Track]:
-    return _search(core, "artist", artist, uris=uris)
+    return _mix_tracks(_search(core, "artist", artist, uris=uris), max_tracks, max_per_album)
 
 
 def build_album_mix(core: CoreProxy, album_uri: str) -> list[Track]:
@@ -186,13 +210,16 @@ def refresh_smart_playlists(core: CoreProxy, config_dict: dict) -> None:
     if raw:
         uris = cast("list[Uri]", [u.strip() for u in raw.split(",") if u.strip()])
     playlist_dir = config_dict.get("playlist_dir") or None
+    max_tracks = int(config_dict.get("max_tracks", 0) or 0)
+    max_per_album = int(config_dict.get("max_per_album", 0) or 0)
 
     decades_raw = config_dict.get("decades", "")
     if decades_raw:
         decades = [d.strip() for d in decades_raw.split(",") if d.strip()]
         for decade in decades:
             try:
-                tracks = build_decade_mix(core, decade, uris=uris)
+                tracks = build_decade_mix(core, decade, uris=uris,
+                                          max_tracks=max_tracks, max_per_album=max_per_album)
             except Exception:
                 logger.exception("Failed to build decade mix for %s", decade)
                 continue
@@ -204,7 +231,8 @@ def refresh_smart_playlists(core: CoreProxy, config_dict: dict) -> None:
         genres = [d.strip() for d in genres_raw.split(",") if d.strip()]
         for genre in genres:
             try:
-                tracks = build_genre_mix(core, genre, uris=uris)
+                tracks = build_genre_mix(core, genre, uris=uris,
+                                         max_tracks=max_tracks, max_per_album=max_per_album)
             except Exception:
                 logger.exception("Failed to build genre mix for %s", genre)
                 continue
@@ -216,7 +244,8 @@ def refresh_smart_playlists(core: CoreProxy, config_dict: dict) -> None:
         artists = [a.strip() for a in artists_raw.split(",") if a.strip()]
         for artist in artists:
             try:
-                tracks = build_artist_mix(core, artist, uris=uris)
+                tracks = build_artist_mix(core, artist, uris=uris,
+                                          max_tracks=max_tracks, max_per_album=max_per_album)
             except Exception:
                 logger.exception("Failed to build artist mix for %s", artist)
                 continue

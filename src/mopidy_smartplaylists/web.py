@@ -29,11 +29,14 @@ class DecadeMixHandler(tornado.web.RequestHandler):
     def initialize(
         self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
         playlist_dir: str | None = None,
+        max_tracks: int = 0, max_per_album: int = 0,
     ) -> None:
         self.core = core
         self.prefix = prefix
         self.uris = uris
         self.playlist_dir = playlist_dir
+        self.max_tracks = max_tracks
+        self.max_per_album = max_per_album
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -42,7 +45,10 @@ class DecadeMixHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write({"error": "Missing 'decade' in request body"})
             return
-        tracks = build_decade_mix(self.core, decade, uris=self.uris)
+        tracks = build_decade_mix(
+            self.core, decade, uris=self.uris,
+            max_tracks=self.max_tracks, max_per_album=self.max_per_album,
+        )
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
             return
@@ -65,11 +71,14 @@ class GenreMixHandler(tornado.web.RequestHandler):
     def initialize(
         self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
         playlist_dir: str | None = None,
+        max_tracks: int = 0, max_per_album: int = 0,
     ) -> None:
         self.core = core
         self.prefix = prefix
         self.uris = uris
         self.playlist_dir = playlist_dir
+        self.max_tracks = max_tracks
+        self.max_per_album = max_per_album
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -78,7 +87,10 @@ class GenreMixHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write({"error": "Missing 'genre' in request body"})
             return
-        tracks = build_genre_mix(self.core, genre, uris=self.uris)
+        tracks = build_genre_mix(
+            self.core, genre, uris=self.uris,
+            max_tracks=self.max_tracks, max_per_album=self.max_per_album,
+        )
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
             return
@@ -101,11 +113,14 @@ class ArtistMixHandler(tornado.web.RequestHandler):
     def initialize(
         self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
         playlist_dir: str | None = None,
+        max_tracks: int = 0, max_per_album: int = 0,
     ) -> None:
         self.core = core
         self.prefix = prefix
         self.uris = uris
         self.playlist_dir = playlist_dir
+        self.max_tracks = max_tracks
+        self.max_per_album = max_per_album
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -114,7 +129,10 @@ class ArtistMixHandler(tornado.web.RequestHandler):
             self.set_status(400)
             self.write({"error": "Missing 'artist' in request body"})
             return
-        tracks = build_artist_mix(self.core, artist, uris=self.uris)
+        tracks = build_artist_mix(
+            self.core, artist, uris=self.uris,
+            max_tracks=self.max_tracks, max_per_album=self.max_per_album,
+        )
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
             return
@@ -287,18 +305,30 @@ def _parse_playlist_dir(config: Config) -> str | None:
     return raw.strip() if raw else None
 
 
+def _parse_int(config: Config, key: str, default: int) -> int:
+    try:
+        return int(config.get("smartplaylists", {}).get(key, default) or default)
+    except (ValueError, TypeError):
+        return default
+
+
 def app_factory(config: Config, core: CoreProxy) -> list[tuple]:
     prefix = config.get("smartplaylists", {}).get("playlist_prefix", "[Smart]")
     uris = _parse_search_uris(config)
     playlist_dir = _parse_playlist_dir(config)
+    max_tracks = _parse_int(config, "max_tracks", 0)
+    max_per_album = _parse_int(config, "max_per_album", 0)
 
     return [
         (r"/decade", DecadeMixHandler,
-         {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir}),
+         {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir,
+          "max_tracks": max_tracks, "max_per_album": max_per_album}),
         (r"/genre", GenreMixHandler,
-         {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir}),
+         {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir,
+          "max_tracks": max_tracks, "max_per_album": max_per_album}),
         (r"/artist", ArtistMixHandler,
-         {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir}),
+         {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir,
+          "max_tracks": max_tracks, "max_per_album": max_per_album}),
         (r"/album", AlbumMixHandler,
          {"core": core, "prefix": prefix, "playlist_dir": playlist_dir}),
         (r"/instant-mix", InstantMixHandler,
