@@ -140,6 +140,8 @@
   .btn-primary:hover:not(:disabled) { opacity: 0.9; }
   .btn-secondary { background: var(--card); color: var(--text); }
   .btn-secondary:hover:not(:disabled) { opacity: 0.9; }
+  .sq-on { background: #14532d !important; color: #bbf7d0 !important; border: 1px solid var(--success) !important; }
+  .sq-off { background: #450a0a !important; color: #fecaca !important; border: 1px solid #f87171 !important; }
   @media (max-width: 768px) {
     body { flex-direction: column; }
     .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 200px; }
@@ -163,6 +165,7 @@
     <div class="actions">
       <button class="btn btn-secondary" onclick="refreshPlaylists()">Refresh All</button>
       <button class="btn btn-secondary" onclick="loadStatus()">Reload List</button>
+      <button id="sq-toggle" class="btn btn-secondary" onclick="toggleSmartQueue()">Smart Queue: ...</button>
     </div>
   </div>
 
@@ -322,6 +325,34 @@ async function generateInstantMix() {
   }
 }
 
+async function loadSqStatus() {
+  const btn = document.getElementById("sq-toggle");
+  try {
+    const data = await api("GET", "/smart-queue");
+    updateSqButton(btn, data.enabled);
+  } catch {
+    btn.textContent = "Smart Queue: ?";
+    btn.className = "btn btn-secondary";
+  }
+}
+
+async function toggleSmartQueue() {
+  const btn = document.getElementById("sq-toggle");
+  const currently = btn.textContent.includes("On");
+  try {
+    const data = await api("POST", "/smart-queue", { enabled: !currently });
+    updateSqButton(btn, data.enabled);
+    showToast("Smart Queue " + (data.enabled ? "enabled" : "disabled"), data.enabled ? "success" : "info");
+  } catch (e) {
+    showToast("Toggle failed: " + e, "error");
+  }
+}
+
+function updateSqButton(btn, enabled) {
+  btn.textContent = "Smart Queue: " + (enabled ? "On" : "Off");
+  btn.className = "btn " + (enabled ? "sq-on" : "sq-off");
+}
+
 async function refreshPlaylists() {
   showToast("Refreshing all configured playlists...", "info");
   try {
@@ -333,7 +364,7 @@ async function refreshPlaylists() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", loadStatus);
+document.addEventListener("DOMContentLoaded", () => { loadStatus(); loadSqStatus(); });
 </script>
 </body>
 </html>
