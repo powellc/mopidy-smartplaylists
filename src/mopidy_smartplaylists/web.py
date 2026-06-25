@@ -29,7 +29,7 @@ class DecadeMixHandler(tornado.web.RequestHandler):
     def initialize(
         self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
         playlist_dir: str | None = None,
-        max_tracks: int = 0, max_per_album: int = 0,
+        max_tracks: int = 0, max_per_album: int = 0, max_per_artist: int = 0,
     ) -> None:
         self.core = core
         self.prefix = prefix
@@ -37,6 +37,7 @@ class DecadeMixHandler(tornado.web.RequestHandler):
         self.playlist_dir = playlist_dir
         self.max_tracks = max_tracks
         self.max_per_album = max_per_album
+        self.max_per_artist = max_per_artist
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -48,6 +49,7 @@ class DecadeMixHandler(tornado.web.RequestHandler):
         tracks = build_decade_mix(
             self.core, decade, uris=self.uris,
             max_tracks=self.max_tracks, max_per_album=self.max_per_album,
+            max_per_artist=self.max_per_artist,
         )
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
@@ -71,7 +73,7 @@ class GenreMixHandler(tornado.web.RequestHandler):
     def initialize(
         self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
         playlist_dir: str | None = None,
-        max_tracks: int = 0, max_per_album: int = 0,
+        max_tracks: int = 0, max_per_album: int = 0, max_per_artist: int = 0,
     ) -> None:
         self.core = core
         self.prefix = prefix
@@ -79,6 +81,7 @@ class GenreMixHandler(tornado.web.RequestHandler):
         self.playlist_dir = playlist_dir
         self.max_tracks = max_tracks
         self.max_per_album = max_per_album
+        self.max_per_artist = max_per_artist
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -90,6 +93,7 @@ class GenreMixHandler(tornado.web.RequestHandler):
         tracks = build_genre_mix(
             self.core, genre, uris=self.uris,
             max_tracks=self.max_tracks, max_per_album=self.max_per_album,
+            max_per_artist=self.max_per_artist,
         )
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
@@ -113,7 +117,7 @@ class ArtistMixHandler(tornado.web.RequestHandler):
     def initialize(
         self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
         playlist_dir: str | None = None,
-        max_tracks: int = 0, max_per_album: int = 0,
+        max_tracks: int = 0, max_per_album: int = 0, max_per_artist: int = 0,
     ) -> None:
         self.core = core
         self.prefix = prefix
@@ -121,6 +125,7 @@ class ArtistMixHandler(tornado.web.RequestHandler):
         self.playlist_dir = playlist_dir
         self.max_tracks = max_tracks
         self.max_per_album = max_per_album
+        self.max_per_artist = max_per_artist
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -132,6 +137,7 @@ class ArtistMixHandler(tornado.web.RequestHandler):
         tracks = build_artist_mix(
             self.core, artist, uris=self.uris,
             max_tracks=self.max_tracks, max_per_album=self.max_per_album,
+            max_per_artist=self.max_per_artist,
         )
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
@@ -323,17 +329,21 @@ def app_factory(config: Config, core: CoreProxy) -> list[tuple]:
     playlist_dir = _parse_playlist_dir(config)
     max_tracks = _parse_int(config, "max_tracks", 0)
     max_per_album = _parse_int(config, "max_per_album", 0)
+    max_per_artist = _parse_int(config, "max_per_artist", 0)
 
     return [
         (r"/decade", DecadeMixHandler,
          {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir,
-          "max_tracks": max_tracks, "max_per_album": max_per_album}),
+          "max_tracks": max_tracks, "max_per_album": max_per_album,
+          "max_per_artist": max_per_artist}),
         (r"/genre", GenreMixHandler,
          {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir,
-          "max_tracks": max_tracks, "max_per_album": max_per_album}),
+          "max_tracks": max_tracks, "max_per_album": max_per_album,
+          "max_per_artist": max_per_artist}),
         (r"/artist", ArtistMixHandler,
          {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir,
-          "max_tracks": max_tracks, "max_per_album": max_per_album}),
+          "max_tracks": max_tracks, "max_per_album": max_per_album,
+          "max_per_artist": max_per_artist}),
         (r"/album", AlbumMixHandler,
          {"core": core, "prefix": prefix, "playlist_dir": playlist_dir}),
         (r"/instant-mix", InstantMixHandler,

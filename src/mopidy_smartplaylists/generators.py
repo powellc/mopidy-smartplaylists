@@ -34,22 +34,38 @@ def _search(
 
 
 def _mix_tracks(
-    tracks: list[Track], max_tracks: int = 0, max_per_album: int = 0,
+    tracks: list[Track], max_tracks: int = 0,
+    max_per_album: int = 0, max_per_artist: int = 0,
 ) -> list[Track]:
     if not tracks:
         return []
-    if max_per_album > 0:
-        random.shuffle(tracks)
-        seen: dict[str, int] = {}
-        result: list[Track] = []
-        for t in tracks:
-            key = t.album.uri if t.album and t.album.uri else str(id(t))
-            count = seen.get(key, 0)
-            if count >= max_per_album:
+    random.shuffle(tracks)
+    seen_album: dict[str, int] = {}
+    seen_artist: dict[str, int] = {}
+    result: list[Track] = []
+    for t in tracks:
+        if max_per_album > 0:
+            album_key = t.album.uri if t.album and t.album.uri else str(id(t))
+            if seen_album.get(album_key, 0) >= max_per_album:
                 continue
-            seen[key] = count + 1
-            result.append(t)
-        tracks = result
+        if max_per_artist > 0:
+            artists = t.artists or []
+            artist_key = None
+            for a in artists:
+                if a.uri:
+                    artist_key = a.uri
+                    break
+            if not artist_key:
+                artist_name = (artists[0].name or "") if artists else ""
+                artist_key = artist_name or str(id(t))
+            if seen_artist.get(artist_key, 0) >= max_per_artist:
+                continue
+        if max_per_album > 0:
+            seen_album[album_key] = seen_album.get(album_key, 0) + 1
+        if max_per_artist > 0:
+            seen_artist[artist_key] = seen_artist.get(artist_key, 0) + 1
+        result.append(t)
+    tracks = result
     if max_tracks > 0:
         tracks = tracks[:max_tracks]
     random.shuffle(tracks)
@@ -58,7 +74,7 @@ def _mix_tracks(
 
 def build_decade_mix(
     core: CoreProxy, decade: str, uris: list[Uri] | None = None,
-    max_tracks: int = 0, max_per_album: int = 0,
+    max_tracks: int = 0, max_per_album: int = 0, max_per_artist: int = 0,
 ) -> list[Track]:
     query = cast("Query[SearchField]", {"date": [parse_decade(decade)]})
     try:
@@ -66,23 +82,23 @@ def build_decade_mix(
     except Exception:
         logger.exception("Decade search failed for %s", decade)
         return []
-    tracks = _mix_tracks(_extract_tracks(result), max_tracks, max_per_album)
+    tracks = _mix_tracks(_extract_tracks(result), max_tracks, max_per_album, max_per_artist)
     logger.info("Found %d tracks for decade %s", len(tracks), decade)
     return tracks
 
 
 def build_genre_mix(
     core: CoreProxy, genre: str, uris: list[Uri] | None = None,
-    max_tracks: int = 0, max_per_album: int = 0,
+    max_tracks: int = 0, max_per_album: int = 0, max_per_artist: int = 0,
 ) -> list[Track]:
-    return _mix_tracks(_search(core, "genre", genre, uris=uris), max_tracks, max_per_album)
+    return _mix_tracks(_search(core, "genre", genre, uris=uris), max_tracks, max_per_album, max_per_artist)
 
 
 def build_artist_mix(
     core: CoreProxy, artist: str, uris: list[Uri] | None = None,
-    max_tracks: int = 0, max_per_album: int = 0,
+    max_tracks: int = 0, max_per_album: int = 0, max_per_artist: int = 0,
 ) -> list[Track]:
-    return _mix_tracks(_search(core, "artist", artist, uris=uris), max_tracks, max_per_album)
+    return _mix_tracks(_search(core, "artist", artist, uris=uris), max_tracks, max_per_album, max_per_artist)
 
 
 def build_album_mix(core: CoreProxy, album_uri: str) -> list[Track]:
