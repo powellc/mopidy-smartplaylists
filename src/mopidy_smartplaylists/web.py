@@ -28,10 +28,12 @@ logger = logging.getLogger(__name__)
 class DecadeMixHandler(tornado.web.RequestHandler):
     def initialize(
         self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
+        playlist_dir: str | None = None,
     ) -> None:
         self.core = core
         self.prefix = prefix
         self.uris = uris
+        self.playlist_dir = playlist_dir
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -44,7 +46,10 @@ class DecadeMixHandler(tornado.web.RequestHandler):
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
             return
-        playlist = save_smart_playlist(self.core, self.prefix, f"{decade}s Mix", tracks)
+        playlist = save_smart_playlist(
+            self.core, self.prefix, f"{decade}s Mix", tracks,
+            playlist_dir=self.playlist_dir,
+        )
         self.write(
             {
                 "playlist": {
@@ -59,10 +64,12 @@ class DecadeMixHandler(tornado.web.RequestHandler):
 class GenreMixHandler(tornado.web.RequestHandler):
     def initialize(
         self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
+        playlist_dir: str | None = None,
     ) -> None:
         self.core = core
         self.prefix = prefix
         self.uris = uris
+        self.playlist_dir = playlist_dir
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -75,7 +82,10 @@ class GenreMixHandler(tornado.web.RequestHandler):
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
             return
-        playlist = save_smart_playlist(self.core, self.prefix, f"{genre} Mix", tracks)
+        playlist = save_smart_playlist(
+            self.core, self.prefix, f"{genre} Mix", tracks,
+            playlist_dir=self.playlist_dir,
+        )
         self.write(
             {
                 "playlist": {
@@ -90,10 +100,12 @@ class GenreMixHandler(tornado.web.RequestHandler):
 class ArtistMixHandler(tornado.web.RequestHandler):
     def initialize(
         self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
+        playlist_dir: str | None = None,
     ) -> None:
         self.core = core
         self.prefix = prefix
         self.uris = uris
+        self.playlist_dir = playlist_dir
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -106,7 +118,10 @@ class ArtistMixHandler(tornado.web.RequestHandler):
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
             return
-        playlist = save_smart_playlist(self.core, self.prefix, f"{artist} Mix", tracks)
+        playlist = save_smart_playlist(
+            self.core, self.prefix, f"{artist} Mix", tracks,
+            playlist_dir=self.playlist_dir,
+        )
         self.write(
             {
                 "playlist": {
@@ -119,9 +134,12 @@ class ArtistMixHandler(tornado.web.RequestHandler):
 
 
 class AlbumMixHandler(tornado.web.RequestHandler):
-    def initialize(self, core: CoreProxy, prefix: str) -> None:
+    def initialize(
+        self, core: CoreProxy, prefix: str, playlist_dir: str | None = None,
+    ) -> None:
         self.core = core
         self.prefix = prefix
+        self.playlist_dir = playlist_dir
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -139,7 +157,10 @@ class AlbumMixHandler(tornado.web.RequestHandler):
             if tracks[0].album and tracks[0].album.name
             else "Album"
         )
-        playlist = save_smart_playlist(self.core, self.prefix, f"{name} Mix", tracks)
+        playlist = save_smart_playlist(
+            self.core, self.prefix, f"{name} Mix", tracks,
+            playlist_dir=self.playlist_dir,
+        )
         self.write(
             {
                 "playlist": {
@@ -154,10 +175,12 @@ class AlbumMixHandler(tornado.web.RequestHandler):
 class InstantMixHandler(tornado.web.RequestHandler):
     def initialize(
         self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
+        playlist_dir: str | None = None,
     ) -> None:
         self.core = core
         self.prefix = prefix
         self.uris = uris
+        self.playlist_dir = playlist_dir
 
     def post(self) -> None:
         data = json.loads(self.request.body)
@@ -186,7 +209,8 @@ class InstantMixHandler(tornado.web.RequestHandler):
                 break
 
         playlist = save_smart_playlist(
-            self.core, self.prefix, f"Instant Mix: {seed_name}", tracks
+            self.core, self.prefix, f"Instant Mix: {seed_name}", tracks,
+            playlist_dir=self.playlist_dir,
         )
         self.write(
             {
@@ -258,17 +282,27 @@ def _parse_search_uris(config: Config) -> list[Uri] | None:
     return None
 
 
+def _parse_playlist_dir(config: Config) -> str | None:
+    raw = config.get("smartplaylists", {}).get("playlist_dir", "")
+    return raw.strip() or None
+
+
 def app_factory(config: Config, core: CoreProxy) -> list[tuple]:
     prefix = config.get("smartplaylists", {}).get("playlist_prefix", "[Smart]")
     uris = _parse_search_uris(config)
+    playlist_dir = _parse_playlist_dir(config)
 
     return [
-        (r"/decade", DecadeMixHandler, {"core": core, "prefix": prefix, "uris": uris}),
-        (r"/genre", GenreMixHandler, {"core": core, "prefix": prefix, "uris": uris}),
-        (r"/artist", ArtistMixHandler, {"core": core, "prefix": prefix, "uris": uris}),
-        (r"/album", AlbumMixHandler, {"core": core, "prefix": prefix}),
+        (r"/decade", DecadeMixHandler,
+         {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir}),
+        (r"/genre", GenreMixHandler,
+         {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir}),
+        (r"/artist", ArtistMixHandler,
+         {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir}),
+        (r"/album", AlbumMixHandler,
+         {"core": core, "prefix": prefix, "playlist_dir": playlist_dir}),
         (r"/instant-mix", InstantMixHandler,
-         {"core": core, "prefix": prefix, "uris": uris}),
+         {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir}),
         (r"/refresh", RefreshHandler, {"core": core, "config": config}),
         (r"/status", StatusHandler, {"core": core, "prefix": prefix}),
     ]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import TYPE_CHECKING, cast
 
@@ -128,9 +129,30 @@ def save_smart_playlist(
     prefix: str,
     name: str,
     tracks: list[Track],
+    playlist_dir: str | None = None,
 ) -> Playlist | None:
     playlist_name = f"{prefix} {name}"
-    uri: str = f"mopidy:smartplaylists:{_sanitize_name(name)}"
+
+    if playlist_dir:
+        filename = f"{_sanitize_name(playlist_name)}.m3u8"
+        filepath = os.path.join(playlist_dir, filename)
+        try:
+            with open(filepath, "w") as f:
+                f.write("#EXTM3U\n")
+                for t in tracks:
+                    if t.uri:
+                        f.write(f"{t.uri}\n")
+        except Exception:
+            logger.exception("Failed to write M3U8 file %s", filepath)
+            return None
+        logger.info(
+            "Saved smart playlist: %s (%d tracks) as %s",
+            playlist_name, len(tracks), filepath,
+        )
+        return Playlist(name=playlist_name, uri=f"m3u:{filename}", tracks=tuple(tracks))
+
+    uri_safe = _sanitize_name(name)
+    uri: str = f"mopidy:smartplaylists:{uri_safe}"
 
     try:
         existing = core.playlists.lookup(cast("Uri", uri)).get()
@@ -163,6 +185,7 @@ def refresh_smart_playlists(core: CoreProxy, config_dict: dict) -> None:
     uris: list[Uri] | None = None
     if raw:
         uris = cast("list[Uri]", [u.strip() for u in raw.split(",") if u.strip()])
+    playlist_dir = config_dict.get("playlist_dir") or None
 
     decades_raw = config_dict.get("decades", "")
     if decades_raw:
@@ -174,7 +197,7 @@ def refresh_smart_playlists(core: CoreProxy, config_dict: dict) -> None:
                 logger.exception("Failed to build decade mix for %s", decade)
                 continue
             if tracks:
-                save_smart_playlist(core, prefix, f"{decade}s Mix", tracks)
+                save_smart_playlist(core, prefix, f"{decade}s Mix", tracks, playlist_dir=playlist_dir)
 
     genres_raw = config_dict.get("genres", "")
     if genres_raw:
@@ -186,7 +209,7 @@ def refresh_smart_playlists(core: CoreProxy, config_dict: dict) -> None:
                 logger.exception("Failed to build genre mix for %s", genre)
                 continue
             if tracks:
-                save_smart_playlist(core, prefix, f"{genre} Mix", tracks)
+                save_smart_playlist(core, prefix, f"{genre} Mix", tracks, playlist_dir=playlist_dir)
 
     artists_raw = config_dict.get("artists", "")
     if artists_raw:
@@ -198,7 +221,7 @@ def refresh_smart_playlists(core: CoreProxy, config_dict: dict) -> None:
                 logger.exception("Failed to build artist mix for %s", artist)
                 continue
             if tracks:
-                save_smart_playlist(core, prefix, f"{artist} Mix", tracks)
+                save_smart_playlist(core, prefix, f"{artist} Mix", tracks, playlist_dir=playlist_dir)
 
 
 def _extract_tracks(search_result: list) -> list[Track]:
