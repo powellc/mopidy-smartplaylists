@@ -293,8 +293,12 @@ class StatusHandler(tornado.web.RequestHandler):
 
 
 def _parse_search_uris(config: Config) -> list[Uri] | None:
-    raw = config.get("smartplaylists", {}).get("search_uris", "")
-    if raw:
+    raw = config.get("smartplaylists", {}).get("search_uris")
+    if raw is None:
+        return None
+    if isinstance(raw, (list, tuple)):
+        return cast("list[Uri]", list(raw))
+    if isinstance(raw, str):
         uris = cast("list[Uri]", [u.strip() for u in raw.split(",") if u.strip()])
         return uris or None
     return None

@@ -205,13 +205,23 @@ def save_smart_playlist(
 
 def refresh_smart_playlists(core: CoreProxy, config_dict: dict) -> None:
     prefix = config_dict.get("playlist_prefix", "[Smart]")
-    raw = config_dict.get("search_uris", "")
+    raw = config_dict.get("search_uris")
     uris: list[Uri] | None = None
-    if raw:
+    if isinstance(raw, (list, tuple)):
+        uris = cast("list[Uri]", list(raw))
+    elif isinstance(raw, str) and raw.strip():
         uris = cast("list[Uri]", [u.strip() for u in raw.split(",") if u.strip()])
-    playlist_dir = config_dict.get("playlist_dir") or None
-    max_tracks = int(config_dict.get("max_tracks", 0) or 0)
-    max_per_album = int(config_dict.get("max_per_album", 0) or 0)
+    playlist_dir = config_dict.get("playlist_dir")
+    if isinstance(playlist_dir, str):
+        playlist_dir = playlist_dir.strip() or None
+    try:
+        max_tracks = int(config_dict.get("max_tracks") or 0)
+    except (ValueError, TypeError):
+        max_tracks = 0
+    try:
+        max_per_album = int(config_dict.get("max_per_album") or 0)
+    except (ValueError, TypeError):
+        max_per_album = 0
 
     decades_raw = config_dict.get("decades", "")
     if decades_raw:
