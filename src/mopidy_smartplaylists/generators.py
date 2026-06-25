@@ -167,6 +167,42 @@ def build_instant_mix(
     return tracks
 
 
+def build_smart_queue_tracks(
+    core: CoreProxy, seed_uri: str, count: int,
+    uris: list[Uri] | None = None,
+    variety_chance: float = 0.15,
+) -> list[Track]:
+    instant_count = max(1, int(count * (1 - variety_chance)))
+    variety_count = count - instant_count
+
+    instant = build_instant_mix(core, seed_uri, limit=instant_count * 2, uris=uris)[:instant_count]
+
+    variety: list[Track] = []
+    if variety_count > 0:
+        try:
+            lookup_result = core.library.lookup(cast("list[Uri]", [seed_uri])).get()
+        except Exception:
+            lookup_result = {}
+        seed_tracks = _flatten_lookup(lookup_result)
+        seed = seed_tracks[0] if seed_tracks else None
+
+        if seed:
+            genres = [g.strip() for g in (seed.genre or "").split("/") if g.strip()]
+            if genres:
+                other_genre = random.choice(genres)
+                variety = _search(core, "genre", other_genre, uris=uris)
+            else:
+                variety = _search(core, "artist", seed.artists[0].name if seed.artists else "", uris=uris)
+            random.shuffle(variety)
+            variety = variety[:variety_count]
+
+    result = instant + variety
+    random.shuffle(result)
+    logger.info("Smart queue: added %d tracks (%d instant, %d variety) from seed %s",
+                len(result), instant_count, variety_count, seed_uri)
+    return result
+
+
 def save_smart_playlist(
     core: CoreProxy,
     prefix: str,

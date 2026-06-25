@@ -26,6 +26,12 @@ class Extension(ext.Extension):
         schema["max_tracks"] = config.Integer(optional=True, minimum=0)
         schema["max_per_album"] = config.Integer(optional=True, minimum=0)
         schema["max_per_artist"] = config.Integer(optional=True, minimum=0)
+        schema["smart_queue_enabled"] = config.Boolean(optional=True)
+        schema["smart_queue_min_tracks"] = config.Integer(optional=True, minimum=0)
+        schema["smart_queue_refill_to"] = config.Integer(optional=True, minimum=0)
+        schema["smart_queue_cooldown"] = config.Integer(optional=True, minimum=0)
+        schema["smart_queue_dedup"] = config.Integer(optional=True, minimum=0)
+        schema["smart_queue_variety"] = config.Float(optional=True, minimum=0.0, maximum=1.0)
         return schema
 
     def validate_environment(self) -> None:

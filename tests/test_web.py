@@ -28,7 +28,6 @@ class TestAppFactory:
         for pattern, handler_cls, kwargs in routes:
             assert isinstance(pattern, str)
             assert issubclass(handler_cls, object)
-            assert "core" in kwargs
 
 
 class _HandlerTestBase:

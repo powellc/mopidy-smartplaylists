@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 if TYPE_CHECKING:
     from mopidy.models import Playlist
 
+from mopidy_smartplaylists import frontend as sq_frontend
 from mopidy_smartplaylists.generators import (
     build_album_mix,
     build_artist_mix,
@@ -299,6 +300,24 @@ class StatusHandler(tornado.web.RequestHandler):
         self.write({"smart_playlists": smart, "count": len(smart)})
 
 
+class SmartQueueControlHandler(tornado.web.RequestHandler):
+    def initialize(self) -> None:
+        pass
+
+    def get(self) -> None:
+        self.write(sq_frontend.smart_queue_status())
+
+    def post(self) -> None:
+        data = json.loads(self.request.body)
+        enable = data.get("enabled", None)
+        if enable is None:
+            self.set_status(400)
+            self.write({"error": "Missing 'enabled' in request body"})
+            return
+        sq_frontend.toggle_smart_queue(bool(enable))
+        self.write(sq_frontend.smart_queue_status())
+
+
 def _parse_search_uris(config: Config) -> list[Uri] | None:
     raw = config.get("smartplaylists", {}).get("search_uris")
     if raw is None:
@@ -350,4 +369,5 @@ def app_factory(config: Config, core: CoreProxy) -> list[tuple]:
          {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir}),
         (r"/refresh", RefreshHandler, {"core": core, "config": config}),
         (r"/status", StatusHandler, {"core": core, "prefix": prefix}),
+        (r"/smart-queue", SmartQueueControlHandler, {}),
     ]
