@@ -10,7 +10,7 @@ jobs:
       - name: SSH and upgrade package
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: mopidy1.local
+          host: mopidy-dev.service
           username: root
           key: ${{ secrets.JAIL_KEY }}
           script: |
