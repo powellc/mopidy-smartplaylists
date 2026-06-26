@@ -46,10 +46,34 @@
     border-radius: var(--radius);
     background: var(--card);
     font-size: 0.875rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .sidebar .playlist-item .info {
+    overflow: hidden;
+  }
+  .sidebar .playlist-item .info .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .sidebar .playlist-item .count {
     color: var(--muted);
     font-size: 0.75rem;
+  }
+  .sidebar .playlist-item .del-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0.25rem;
+    transition: color 0.2s;
+  }
+  .sidebar .playlist-item .del-btn:hover {
+    color: #f87171;
   }
   .sidebar .empty {
     color: var(--muted);
@@ -249,10 +273,16 @@ async function loadStatus() {
     }
     list.innerHTML = data.smart_playlists.map(p =>
       `<div class="playlist-item">
-        <div>${esc(p.name)}</div>
-        <div class="count">${p.tracks} track${p.tracks === 1 ? "" : "s"}</div>
+        <div class="info">
+          <div class="name">${esc(p.name)}</div>
+          <div class="count">${p.tracks} track${p.tracks === 1 ? "" : "s"}</div>
+        </div>
+        <button class="del-btn" data-uri="${esc(p.uri)}" title="Delete playlist">✕</button>
       </div>`
     ).join("");
+    list.querySelectorAll(".del-btn").forEach(btn => {
+      btn.onclick = () => deletePlaylist(btn.dataset.uri);
+    });
   } catch {
     list.innerHTML = '<div class="empty">Could not load playlists</div>';
   }
@@ -402,6 +432,17 @@ async function refreshPlaylists() {
     loadStatus();
   } catch (e) {
     showToast("Refresh failed: " + e, "error");
+  }
+}
+
+async function deletePlaylist(uri) {
+  if (!confirm('Delete "' + uri + '"?')) return;
+  try {
+    await api("POST", "/delete", { uri });
+    showToast("Deleted", "success");
+    loadStatus();
+  } catch (e) {
+    showToast("Delete failed: " + e, "error");
   }
 }
 

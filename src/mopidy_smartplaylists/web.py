@@ -326,6 +326,26 @@ class StatusHandler(tornado.web.RequestHandler):
         self.write({"smart_playlists": smart, "count": len(smart)})
 
 
+class PlaylistDeleteHandler(tornado.web.RequestHandler):
+    def initialize(self, core: CoreProxy) -> None:
+        self.core = core
+
+    def post(self) -> None:
+        data = json.loads(self.request.body)
+        uri = data.get("uri", "")
+        if not uri:
+            self.set_status(400)
+            self.write({"error": "Missing 'uri' in request body"})
+            return
+        try:
+            self.core.playlists.delete(uri).get()
+            self.write({"status": "ok"})
+        except Exception as e:
+            logger.exception("Failed to delete playlist %s", uri)
+            self.set_status(500)
+            self.write({"error": str(e)})
+
+
 class SmartQueueControlHandler(tornado.web.RequestHandler):
     def initialize(self) -> None:
         pass
@@ -395,5 +415,6 @@ def app_factory(config: Config, core: CoreProxy) -> list[tuple]:
          {"core": core, "uris": uris, "variety_chance": 0.15}),
         (r"/refresh", RefreshHandler, {"core": core, "config": config}),
         (r"/status", StatusHandler, {"core": core, "prefix": prefix}),
+        (r"/delete", PlaylistDeleteHandler, {"core": core}),
         (r"/smart-queue", SmartQueueControlHandler, {}),
     ]
