@@ -200,7 +200,7 @@
       <div id="album-result" class="result"></div>
     </div>
 
-    <div class="card">
+    <div class="card" style="order: 1;">
       <h3>Instant Mix</h3>
       <p>Generate a mix or insert into queue based on a track URI (same genre + similar artists).</p>
       <div class="field" style="flex-direction: column; gap: 0.5rem;">
@@ -220,7 +220,7 @@
 </main>
 
 <script>
-const BASE = window.location.pathname.replace(/\/+$/, "");
+const BASE = window.location.pathname.replace(/\/static\/.*$/, "");
 
 function showToast(msg, type) {
   const t = document.getElementById("toast");
