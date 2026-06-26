@@ -291,12 +291,17 @@ async function generate(endpoint, inputId, resultId, bodyFn) {
   }
 }
 
+function instantUri() {
+  return document.getElementById("instant-uri-input").value.trim();
+}
+function instantLimit() {
+  return parseInt(document.getElementById("instant-limit-input").value, 10) || 15;
+}
+
 async function generateInstantMix() {
-  const uriInput = document.getElementById("instant-uri-input");
-  const limitInput = document.getElementById("instant-limit-input");
   const result = document.getElementById("instant-result");
-  const uri = uriInput.value.trim();
-  const limit = parseInt(limitInput.value, 10) || 50;
+  const uri = instantUri();
+  const limit = instantLimit();
   if (!uri) {
     result.className = "result error";
     result.textContent = "Enter a track URI";
@@ -313,6 +318,48 @@ async function generateInstantMix() {
     } else {
       result.textContent = "No similar tracks found";
     }
+  } catch (e) {
+    result.className = "result error";
+    result.textContent = "Error: " + e;
+  }
+}
+
+async function queueNext() {
+  const result = document.getElementById("instant-result");
+  const uri = instantUri();
+  const count = instantLimit();
+  if (!uri) {
+    result.className = "result error";
+    result.textContent = "Enter a track URI";
+    return;
+  }
+  result.textContent = "Inserting next in queue...";
+  result.className = "result";
+  try {
+    const data = await api("POST", "/queue-next", { uri, count });
+    result.className = "result success";
+    result.textContent = "Inserted " + data.tracks + " track" + (data.tracks === 1 ? "" : "s") + " next";
+  } catch (e) {
+    result.className = "result error";
+    result.textContent = "Error: " + e;
+  }
+}
+
+async function queueEnd() {
+  const result = document.getElementById("instant-result");
+  const uri = instantUri();
+  const count = instantLimit();
+  if (!uri) {
+    result.className = "result error";
+    result.textContent = "Enter a track URI";
+    return;
+  }
+  result.textContent = "Inserting at end of queue...";
+  result.className = "result";
+  try {
+    const data = await api("POST", "/queue-end", { uri, count });
+    result.className = "result success";
+    result.textContent = "Inserted " + data.tracks + " track" + (data.tracks === 1 ? "" : "s") + " at end";
   } catch (e) {
     result.className = "result error";
     result.textContent = "Error: " + e;
