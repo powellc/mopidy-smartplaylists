@@ -8,7 +8,6 @@ from mopidy.models import Playlist, Ref, Track
 from mopidy_smartplaylists.web import (
     AlbumMixHandler,
     ArtistMixHandler,
-    DecadeMixHandler,
     GenreMixHandler,
     InstantMixHandler,
     RefreshHandler,
@@ -48,63 +47,6 @@ class _HandlerTestBase:
             headers=tornado.httputil.HTTPHeaders(),
         )
         return handler_cls(app, request, **kwargs)
-
-
-class TestDecadeMixHandler:
-    def test_missing_decade_returns_400(self):
-        app = tornado.web.Application(
-            [
-                (
-                    r"/decade",
-                    DecadeMixHandler,
-                    {"core": mock.Mock(), "prefix": "[Smart]"},
-                ),
-            ]
-        )
-        request = tornado.httputil.HTTPServerRequest(
-            method="POST",
-            uri="/decade",
-            body=json.dumps({}).encode(),
-            connection=mock.Mock(),
-            headers=tornado.httputil.HTTPHeaders(),
-        )
-        handler = DecadeMixHandler(app, request, core=mock.Mock(), prefix="[Smart]")
-        handler.set_status = mock.Mock()
-        handler.write = mock.Mock()
-        handler.post()
-        handler.set_status.assert_called_once_with(400)
-
-    def test_success(self):
-        core = mock.Mock()
-        core.library.search.return_value.get.return_value = [
-            mock.Mock(tracks=[Track(uri="dummy:1", name="T")])
-        ]
-        core.playlists.lookup.return_value.get.return_value = None
-        core.playlists.save.return_value.get.return_value = Playlist(
-            name="[Smart] 1980s Mix",
-            uri="mopidy:smartplaylists:1980s_mix",
-            tracks=[Track(uri="dummy:1", name="T")],
-        )
-
-        app = tornado.web.Application(
-            [
-                (r"/decade", DecadeMixHandler, {"core": core, "prefix": "[Smart]"}),
-            ]
-        )
-        request = tornado.httputil.HTTPServerRequest(
-            method="POST",
-            uri="/decade",
-            body=json.dumps({"decade": "1980"}).encode(),
-            connection=mock.Mock(),
-            headers=tornado.httputil.HTTPHeaders(),
-        )
-        handler = DecadeMixHandler(app, request, core=core, prefix="[Smart]")
-        handler._transforms = []
-        handler.write = mock.Mock()
-        handler.post()
-        data = handler.write.call_args[0][0]
-        assert data["playlist"]["name"] == "[Smart] 1980s Mix"
-        assert data["playlist"]["tracks"] == 1
 
 
 class TestGenreMixHandler:

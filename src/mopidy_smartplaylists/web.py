@@ -16,7 +16,6 @@ from mopidy_smartplaylists import frontend as sq_frontend
 from mopidy_smartplaylists.generators import (
     build_album_mix,
     build_artist_mix,
-    build_decade_mix,
     build_genre_mix,
     build_instant_mix,
     build_smart_queue_tracks,
@@ -25,50 +24,6 @@ from mopidy_smartplaylists.generators import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-class DecadeMixHandler(tornado.web.RequestHandler):
-    def initialize(
-        self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
-        playlist_dir: str | None = None,
-        max_tracks: int = 0, max_per_album: int = 0, max_per_artist: int = 0,
-    ) -> None:
-        self.core = core
-        self.prefix = prefix
-        self.uris = uris
-        self.playlist_dir = playlist_dir
-        self.max_tracks = max_tracks
-        self.max_per_album = max_per_album
-        self.max_per_artist = max_per_artist
-
-    def post(self) -> None:
-        data = json.loads(self.request.body)
-        decade = data.get("decade", "")
-        if not decade:
-            self.set_status(400)
-            self.write({"error": "Missing 'decade' in request body"})
-            return
-        tracks = build_decade_mix(
-            self.core, decade, uris=self.uris,
-            max_tracks=self.max_tracks, max_per_album=self.max_per_album,
-            max_per_artist=self.max_per_artist,
-        )
-        if not tracks:
-            self.write({"playlist": None, "tracks": 0})
-            return
-        playlist = save_smart_playlist(
-            self.core, self.prefix, f"{decade}s Mix", tracks,
-            playlist_dir=self.playlist_dir,
-        )
-        self.write(
-            {
-                "playlist": {
-                    "name": playlist.name if playlist else None,
-                    "uri": playlist.uri if playlist else None,
-                    "tracks": len(tracks),
-                },
-            }
-        )
 
 
 class GenreMixHandler(tornado.web.RequestHandler):
@@ -422,10 +377,6 @@ def app_factory(config: Config, core: CoreProxy) -> list[tuple]:
     max_per_artist = _parse_int(config, "max_per_artist", 0)
 
     return [
-        (r"/decade", DecadeMixHandler,
-         {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir,
-          "max_tracks": max_tracks, "max_per_album": max_per_album,
-          "max_per_artist": max_per_artist}),
         (r"/genre", GenreMixHandler,
          {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir,
           "max_tracks": max_tracks, "max_per_album": max_per_album,
