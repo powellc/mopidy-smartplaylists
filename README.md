@@ -1,6 +1,6 @@
 # mopidy-smartplaylists
 
-[![Deploy](https://code.lab.unbl.ink/secstate/mopidy-smartplaylets/actions/workflows/deploy.yml/badge.svg)](https://code.lab.unbl.ink/secstate/mopidy-smartplaylists/actions)
+[![Deploy](https://code.lab.unbl.ink/secstate/mopidy-smartplaylists/actions/workflows/deploy.yml/badge.svg)](https://code.lab.unbl.ink/secstate/mopidy-smartplaylists/actions)
 
 Mopidy extension for generating diverse, full-length smart playlists from a local music library, with queue auto-refill.
 
@@ -17,13 +17,13 @@ Mopidy extension for generating diverse, full-length smart playlists from a loca
 
 ## Bookmarklet: Toggle Smart Queue
 
-Drag this link to your bookmarks bar to toggle the Smart Queue from any page:
+Drag this link to your bookmarks bar to toggle the Smart Queue:
 
 ```
-javascript:(function(){var h=location.origin.replace(/\/+$/,'');fetch(h+'/smart-queue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!confirm('Toggle Smart Queue?')})}).then(function(r){return r.json()}).then(function(d){alert('Smart Queue: '+(d.enabled?'On':'Off'))}).catch(function(){alert('Failed — not on Mopidy host?')})})();
+javascript:(function(){var u=location.origin.replace(/\/+$/,'');fetch(u+'/smartplaylists/smart-queue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!confirm('Toggle Smart Queue?')})}).then(function(r){return r.json()}).then(function(d){alert('Smart Queue: '+(d.enabled?'On':'Off'))}).catch(function(e){alert('Failed: '+e)})})();
 ```
 
-Works when your browser is on the same Mopidy server (e.g. `http://mopidy-dev.service:6680/...`). Replaces `location.origin` with your server URL if bookmarking from a different domain.
+Works from any page on the same Mopidy host (Iris, smart playlists UI, etc.). Uses `location.origin` and appends `/smartplaylists/smart-queue`.
 
 ## Configuration
 
