@@ -19,6 +19,7 @@ from mopidy_smartplaylists.generators import (
     build_decade_mix,
     build_genre_mix,
     build_instant_mix,
+    build_smart_queue_tracks,
     refresh_smart_playlists,
     save_smart_playlist,
 )
@@ -248,6 +249,76 @@ class InstantMixHandler(tornado.web.RequestHandler):
         )
 
 
+class QueueInsertNextHandler(tornado.web.RequestHandler):
+    def initialize(
+        self, core: CoreProxy, uris: list[Uri] | None = None,
+        variety_chance: float = 0.15,
+    ) -> None:
+        self.core = core
+        self.uris = uris
+        self.variety_chance = variety_chance
+
+    def post(self) -> None:
+        data = json.loads(self.request.body)
+        track_uri = data.get("uri", "")
+        count = data.get("count", 15)
+        if not track_uri:
+            self.set_status(400)
+            self.write({"error": "Missing 'uri' in request body"})
+            return
+        tracks = build_smart_queue_tracks(
+            self.core, track_uri, count,
+            uris=self.uris, variety_chance=self.variety_chance,
+        )
+        if not tracks:
+            self.write({"tracks": 0})
+            return
+        try:
+            current = self.core.playback.get_current_tl_track().get()
+        except Exception:
+            current = None
+        if current:
+            try:
+                idx = self.core.tracklist.index(current).get()
+            except Exception:
+                idx = None
+            if idx is not None:
+                self.core.tracklist.add(tracks, at_position=idx + 1).get()
+            else:
+                self.core.tracklist.add(tracks).get()
+        else:
+            self.core.tracklist.add(tracks).get()
+        self.write({"tracks": len(tracks)})
+
+
+class QueueInsertEndHandler(tornado.web.RequestHandler):
+    def initialize(
+        self, core: CoreProxy, uris: list[Uri] | None = None,
+        variety_chance: float = 0.15,
+    ) -> None:
+        self.core = core
+        self.uris = uris
+        self.variety_chance = variety_chance
+
+    def post(self) -> None:
+        data = json.loads(self.request.body)
+        track_uri = data.get("uri", "")
+        count = data.get("count", 15)
+        if not track_uri:
+            self.set_status(400)
+            self.write({"error": "Missing 'uri' in request body"})
+            return
+        tracks = build_smart_queue_tracks(
+            self.core, track_uri, count,
+            uris=self.uris, variety_chance=self.variety_chance,
+        )
+        if not tracks:
+            self.write({"tracks": 0})
+            return
+        self.core.tracklist.add(tracks).get()
+        self.write({"tracks": len(tracks)})
+
+
 class RefreshHandler(tornado.web.RequestHandler):
     def initialize(self, core: CoreProxy, config: Config) -> None:
         self.core = core
@@ -367,6 +438,10 @@ def app_factory(config: Config, core: CoreProxy) -> list[tuple]:
          {"core": core, "prefix": prefix, "playlist_dir": playlist_dir}),
         (r"/instant-mix", InstantMixHandler,
          {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir}),
+        (r"/queue-next", QueueInsertNextHandler,
+         {"core": core, "uris": uris, "variety_chance": 0.15}),
+        (r"/queue-end", QueueInsertEndHandler,
+         {"core": core, "uris": uris, "variety_chance": 0.15}),
         (r"/refresh", RefreshHandler, {"core": core, "config": config}),
         (r"/status", StatusHandler, {"core": core, "prefix": prefix}),
         (r"/smart-queue", SmartQueueControlHandler, {}),
