@@ -189,14 +189,53 @@ def build_smart_queue_tracks(
         seed = seed_tracks[0] if seed_tracks else None
 
         if seed:
-            genres = [g.strip() for g in (seed.genre or "").split("/") if g.strip()]
-            if genres:
-                other_genre = random.choice(genres)
-                variety = _search(core, "genre", other_genre, uris=uris)
-            else:
-                variety = _search(core, "artist", seed.artists[0].name if seed.artists else "", uris=uris)
-            random.shuffle(variety)
-            variety = variety[:variety_count]
+-            genres = [g.strip() for g in (seed.genre or "").split("/") if g.strip()]
+-            if genres:
+-                other_genre = random.choice(genres)
+-                variety = _search(core, "genre", other_genre, uris=uris)
+-            else:
+-                variety = _search(core, "artist", seed.artists[0].name if seed.artists else "", uris=uris)
++            potential_attributes: list[tuple[str, str]] = [] # [(attribute_type, attribute_value)]
++            genres = [g.strip() for g in (seed.genre or "").split("/") if g.strip()]
++            if genres:
++                potential_attributes.extend([("genre", g) for g in genres])
++            
++            artist_names = [a_ref.name for a_ref in seed.artists if a_ref.name]
++            if artist_names:
++                potential_attributes.extend([("artist", name) for name in artist_names])
++
++            variety: list[Track] = []
++            for attr_type, attr_value in potential_attributes:
++                try:
++                    if attr_type == "genre":
++                        search_result_tracks = _search(core, "genre", attr_value, uris=uris)
++                    elif attr_type == "artist":
++                        search_result_tracks = _search(core, "artist", attr_value, uris=uris)
++                    else:
++                        continue
++
++                    for t in search_result_tracks:
++                        if t.uri and t.uri != seed_uri and t not in variety:
++                            variety.append(t)
++                except Exception as e:
++                    logger.warning("Could not generate variety for %s=%s: %s", attr_type, attr_value, str(e))
+
+-            random.shuffle(variety)
+-            variety = variety[:variety_count]
++            # Shuffle all collected unique tracks and cap at the required count
++            variety = list(set(variety)) # Ensure uniqueness first
++            random.shuffle(variety) 
++            variety = variety[:variety_count]
+
+         if seed:
+             genres = [g.strip() for g in (seed.genre or "").split("/") if g.strip()]
+-            if genres:
+-                other_genre = random.choice(genres)
+-                variety = _search(core, "genre", other_genre, uris=uris)
+-            else:
+-                variety = _search(core, "artist", seed.artists[0].name if seed.artists else "", uris=uris)
+-            random.shuffle(variety)
+-            variety = variety[:variety_count]
 
     result = instant + variety
     random.shuffle(result)
@@ -276,7 +315,7 @@ def refresh_smart_playlists(core: CoreProxy, config_dict: dict) -> None:
     if isinstance(playlist_dir, str):
         playlist_dir = playlist_dir.strip() or None
     try:
-        max_tracks = int(config_dict.get("max_tracks") or 0)
+        max_tracks = int(config_dict.get("max_tracks", "75"))
     except (ValueError, TypeError):
         max_tracks = 0
     try:
