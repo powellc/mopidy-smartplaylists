@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 from typing import TYPE_CHECKING, cast
 
 import tornado.web
@@ -191,6 +192,56 @@ class InstantMixHandler(tornado.web.RequestHandler):
 
         playlist = save_smart_playlist(
             self.core, self.prefix, f"Instant Mix: {seed_name}", tracks,
+            playlist_dir=self.playlist_dir,
+        )
+        self.write(
+            {
+                "playlist": {
+                    "name": playlist.name if playlist else None,
+                    "uri": playlist.uri if playlist else None,
+                    "tracks": len(tracks),
+                },
+            }
+        )
+
+
+class PlaylistMixHandler(tornado.web.RequestHandler):
+    def initialize(
+        self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
+        playlist_dir: str | None = None,
+    ) -> None:
+        self.core = core
+        self.prefix = prefix
+        self.uris = uris
+        self.playlist_dir = playlist_dir
+
+    def post(self) -> None:
+        data = json.loads(self.request.body)
+        playlist_uri = data.get("uri", "")
+        limit = data.get("limit", 50)
+        if not playlist_uri:
+            self.set_status(400)
+            self.write({"error": "Missing 'uri' in request body"})
+            return
+        try:
+            pl = self.core.playlists.lookup(playlist_uri).get()
+        except Exception:
+            logger.exception("Playlist lookup failed for %s", playlist_uri)
+            self.write({"playlist": None, "tracks": 0})
+            return
+        if not pl or not pl.tracks:
+            self.write({"playlist": None, "tracks": 0})
+            return
+        seed = random.choice(pl.tracks)
+        if not seed.uri:
+            self.write({"playlist": None, "tracks": 0})
+            return
+        tracks = build_instant_mix(self.core, seed.uri, limit, uris=self.uris)
+        if not tracks:
+            self.write({"playlist": None, "tracks": 0})
+            return
+        playlist = save_smart_playlist(
+            self.core, self.prefix, f"Playlist Mix: {pl.name}", tracks,
             playlist_dir=self.playlist_dir,
         )
         self.write(
@@ -408,6 +459,8 @@ def app_factory(config: Config, core: CoreProxy) -> list[tuple]:
         (r"/album", AlbumMixHandler,
          {"core": core, "prefix": prefix, "playlist_dir": playlist_dir}),
         (r"/instant-mix", InstantMixHandler,
+         {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir}),
+        (r"/playlist-mix", PlaylistMixHandler,
          {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir}),
         (r"/queue-next", QueueInsertNextHandler,
          {"core": core, "uris": uris, "variety_chance": 0.15}),

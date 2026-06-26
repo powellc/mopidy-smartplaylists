@@ -224,6 +224,16 @@
       <div id="album-result" class="result"></div>
     </div>
 
+    <div class="card">
+      <h3>Playlist Mix</h3>
+      <p>Generate a mix from a random track in a playlist URI.</p>
+      <div class="field">
+        <input id="playlist-uri-input" type="text" placeholder="e.g. mopidy:playlist:abc" />
+        <button class="btn btn-primary" onclick="generatePlaylistMix()">Generate</button>
+      </div>
+      <div id="playlist-mix-result" class="result"></div>
+    </div>
+
     <div class="card" style="order: 1; grid-column: 1 / -1;">
       <h3>Instant Mix</h3>
       <p>Generate a mix or insert into queue based on a track URI (same genre + similar artists).</p>
@@ -390,6 +400,32 @@ async function queueEnd() {
     const data = await api("POST", "/queue-end", { uri, count });
     result.className = "result success";
     result.textContent = "Inserted " + data.tracks + " track" + (data.tracks === 1 ? "" : "s") + " at end";
+  } catch (e) {
+    result.className = "result error";
+    result.textContent = "Error: " + e;
+  }
+}
+
+async function generatePlaylistMix() {
+  const input = document.getElementById("playlist-uri-input");
+  const result = document.getElementById("playlist-mix-result");
+  const uri = input.value.trim();
+  if (!uri) {
+    result.className = "result error";
+    result.textContent = "Enter a playlist URI";
+    return;
+  }
+  result.textContent = "Generating...";
+  result.className = "result";
+  try {
+    const data = await api("POST", "/playlist-mix", { uri });
+    if (data.playlist) {
+      result.className = "result success";
+      result.textContent = 'Created "' + data.playlist.name + '" (' + data.playlist.tracks + " tracks)";
+      loadStatus();
+    } else {
+      result.textContent = "No tracks found";
+    }
   } catch (e) {
     result.className = "result error";
     result.textContent = "Error: " + e;
