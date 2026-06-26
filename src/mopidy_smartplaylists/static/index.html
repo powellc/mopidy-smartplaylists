@@ -220,7 +220,7 @@
 </main>
 
 <script>
-const BASE = window.location.pathname.replace(/\/static\/.*$/, "");
+const BASE = window.location.pathname.replace(/\/static\/.*$/, "").replace(/\/+$/, "");
 
 function showToast(msg, type) {
   const t = document.getElementById("toast");
