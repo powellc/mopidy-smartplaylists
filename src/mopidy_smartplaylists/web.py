@@ -166,30 +166,24 @@ class InstantMixHandler(tornado.web.RequestHandler):
 
     def post(self) -> None:
         data = json.loads(self.request.body)
-        track_uri = data.get("uri", "")
+        uri = data.get("uri", "")
         limit = data.get("limit", 50)
-        if not track_uri:
+        if not uri:
             self.set_status(400)
             self.write({"error": "Missing 'uri' in request body"})
             return
-        tracks = build_instant_mix(self.core, track_uri, limit, uris=self.uris)
+
+        seed = self._resolve_seed_track(uri)
+        if not seed or not seed.uri:
+            self.write({"playlist": None, "tracks": 0})
+            return
+
+        tracks = build_instant_mix(self.core, seed.uri, limit, uris=self.uris)
         if not tracks:
             self.write({"playlist": None, "tracks": 0})
             return
 
-        try:
-            lookup_result = self.core.library.lookup([track_uri]).get()
-        except Exception:
-            logger.exception("Track lookup failed for %s", track_uri)
-            self.write({"playlist": None, "tracks": 0})
-            return
-        seed_name = "Instant Mix"
-        for uri_tracks in lookup_result.values():
-            for t in uri_tracks:
-                if t.name:
-                    seed_name = t.name
-                break
-
+        seed_name = seed.name or "Instant Mix"
         playlist = save_smart_playlist(
             self.core, self.prefix, f"Instant Mix: {seed_name}", tracks,
             playlist_dir=self.playlist_dir,
@@ -203,6 +197,25 @@ class InstantMixHandler(tornado.web.RequestHandler):
                 },
             }
         )
+
+    def _resolve_seed_track(self, uri: str):
+        try:
+            lookup = self.core.library.lookup([uri]).get()
+        except Exception:
+            lookup = None
+        if lookup:
+            tracks = [t for ts in lookup.values() for t in (ts or []) if t.uri]
+            if tracks:
+                return random.choice(tracks)
+        try:
+            pl = self.core.playlists.lookup(uri).get()
+        except Exception:
+            pl = None
+        if pl and pl.tracks:
+            valid = [t for t in pl.tracks if t.uri]
+            if valid:
+                return random.choice(valid)
+        return None
 
 
 class PlaylistMixHandler(tornado.web.RequestHandler):
