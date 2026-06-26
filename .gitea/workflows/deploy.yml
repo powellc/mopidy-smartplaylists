@@ -8,11 +8,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: SSH and upgrade package
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: mopidy1.local
           username: root
-          key: ${{ secrets.DEPLOY_KEY }}
+          key: ${{ secrets.JAIL_KEY }}
           script: |
             pip uninstall -y mopidy-smartplaylists
             pip install git+https://code.lab.unbl.ink/secstate/mopidy-smartplaylists@main
