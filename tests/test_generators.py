@@ -140,7 +140,8 @@ class TestBuildInstantMix:
         result = build_instant_mix(core, "dummy:seed", limit=50)
 
         assert len(result) == 2
-        assert result[0].uri == "dummy:similar1"
+        uris = {t.uri for t in result}
+        assert uris == {"dummy:similar1", "dummy:similar2"}
 
     def test_excludes_seed_track(self):
         core = mock.Mock()

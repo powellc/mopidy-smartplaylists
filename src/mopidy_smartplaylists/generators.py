@@ -6,6 +6,8 @@ import random
 import re
 from typing import TYPE_CHECKING, cast
 
+import urllib.parse
+
 from mopidy.models import Playlist, Track
 
 if TYPE_CHECKING:
@@ -74,10 +76,76 @@ def _mix_tracks(
     return tracks
 
 
+def _browse_album_uris_by_field(
+    core: CoreProxy, field: str, value: str,
+) -> list[str]:
+    if field == "genre":
+        browse_uri = f"local:directory?genre={urllib.parse.quote(value)}"
+    elif field == "artist":
+        browse_uri = f"local:directory?artist={urllib.parse.quote(value)}"
+    elif field == "date":
+        browse_uri = f"local:directory?date={urllib.parse.quote(value)}"
+    else:
+        return []
+
+    try:
+        refs = core.library.browse(cast("Uri", browse_uri)).get()
+        album_uris = []
+        for ref in refs:
+            uri = ref.get("uri", "")
+            parsed = urllib.parse.urlparse(uri)
+            params = urllib.parse.parse_qs(parsed.query)
+            album_uri = params.get("album", [None])[0]
+            if album_uri:
+                album_uris.append(album_uri)
+        return album_uris
+    except Exception:
+        logger.exception("Browse failed for %s=%s", field, value)
+        return []
+
+
+def _get_tracks_from_albums(
+    core: CoreProxy, album_uris: list[str], max_tracks: int = 0,
+    max_per_album: int = 0, max_per_artist: int = 0,
+) -> list[Track]:
+    if not album_uris:
+        return []
+
+    random.shuffle(album_uris)
+
+    if max_tracks > 0:
+        needed = max(10, max_tracks * 2 // 10)
+        album_uris = album_uris[:needed]
+
+    try:
+        lookup_result = core.library.lookup(cast("list[Uri]", album_uris)).get()
+    except Exception:
+        logger.exception("Album lookup failed")
+        return []
+
+    all_tracks = _flatten_lookup(lookup_result)
+    return _mix_tracks(all_tracks, max_tracks, max_per_album, max_per_artist)
+
+
 def build_decade_mix(
     core: CoreProxy, decade: str, uris: list[Uri] | None = None,
     max_tracks: int = 0, max_per_album: int = 0, max_per_artist: int = 0,
 ) -> list[Track]:
+    decade_clean = decade.strip().rstrip("s")
+    try:
+        decade_start = int(decade_clean)
+        years = [str(y) for y in range(decade_start, decade_start + 10)]
+        all_album_uris: list[str] = []
+        for year in years:
+            album_uris = _browse_album_uris_by_field(core, "date", year)
+            all_album_uris.extend(album_uris)
+        if all_album_uris:
+            random.shuffle(all_album_uris)
+            logger.info("Found %d albums for decade %s via browse", len(all_album_uris), decade)
+            return _get_tracks_from_albums(core, all_album_uris, max_tracks, max_per_album, max_per_artist)
+    except (ValueError, TypeError):
+        pass
+
     query = cast("Query[SearchField]", {"date": [parse_decade(decade)]})
     try:
         result = core.library.search(query, uris=uris).get()
@@ -85,7 +153,7 @@ def build_decade_mix(
         logger.exception("Decade search failed for %s", decade)
         return []
     tracks = _mix_tracks(_extract_tracks(result), max_tracks, max_per_album, max_per_artist)
-    logger.info("Found %d tracks for decade %s", len(tracks), decade)
+    logger.info("Found %d tracks for decade %s via search", len(tracks), decade)
     return tracks
 
 
@@ -93,6 +161,11 @@ def build_genre_mix(
     core: CoreProxy, genre: str, uris: list[Uri] | None = None,
     max_tracks: int = 0, max_per_album: int = 0, max_per_artist: int = 0,
 ) -> list[Track]:
+    album_uris = _browse_album_uris_by_field(core, "genre", genre)
+    if album_uris:
+        logger.info("Found %d albums for genre %s via browse", len(album_uris), genre)
+        return _get_tracks_from_albums(core, album_uris, max_tracks, max_per_album, max_per_artist)
+    logger.warning("No albums found for genre %s, falling back to search", genre)
     return _mix_tracks(_search(core, "genre", genre, uris=uris), max_tracks, max_per_album, max_per_artist)
 
 
@@ -100,6 +173,11 @@ def build_artist_mix(
     core: CoreProxy, artist: str, uris: list[Uri] | None = None,
     max_tracks: int = 0, max_per_album: int = 0, max_per_artist: int = 0,
 ) -> list[Track]:
+    album_uris = _browse_album_uris_by_field(core, "artist", artist)
+    if album_uris:
+        logger.info("Found %d albums for artist %s via browse", len(album_uris), artist)
+        return _get_tracks_from_albums(core, album_uris, max_tracks, max_per_album, max_per_artist)
+    logger.warning("No albums found for artist %s, falling back to search", artist)
     return _mix_tracks(_search(core, "artist", artist, uris=uris), max_tracks, max_per_album, max_per_artist)
 
 
@@ -139,28 +217,56 @@ def build_instant_mix(
     similar: dict[str, Track] = {}
 
     for genre in genres:
-        g_query = cast("Query[SearchField]", {"genre": [genre]})
-        try:
-            genre_result = core.library.search(g_query, uris=uris).get()
-        except Exception:
-            logger.exception("Genre search failed for %s", genre)
-            continue
-        for batch in genre_result:
-            for t in batch.tracks:
-                if t.uri and t.uri != track_uri:
-                    similar[t.uri] = t
+        album_uris = _browse_album_uris_by_field(core, "genre", genre)
+        if album_uris:
+            random.shuffle(album_uris)
+            selected = album_uris[:max(10, limit)]
+            try:
+                lookup_result = core.library.lookup(cast("list[Uri]", selected)).get()
+            except Exception:
+                logger.exception("Album lookup failed for genre %s", genre)
+                continue
+            for uri_tracks in lookup_result.values():
+                for t in uri_tracks:
+                    if t.uri and t.uri != track_uri:
+                        similar[t.uri] = t
+        else:
+            g_query = cast("Query[SearchField]", {"genre": [genre]})
+            try:
+                genre_result = core.library.search(g_query, uris=uris).get()
+            except Exception:
+                logger.exception("Genre search failed for %s", genre)
+                continue
+            for batch in genre_result:
+                for t in batch.tracks:
+                    if t.uri and t.uri != track_uri:
+                        similar[t.uri] = t
 
     for artist in artists:
-        a_query = cast("Query[SearchField]", {"artist": [artist]})
-        try:
-            artist_result = core.library.search(a_query, uris=uris).get()
-        except Exception:
-            logger.exception("Artist search failed for %s", artist)
-            continue
-        for batch in artist_result:
-            for t in batch.tracks:
-                if t.uri and t.uri != track_uri:
-                    similar[t.uri] = t
+        album_uris = _browse_album_uris_by_field(core, "artist", artist)
+        if album_uris:
+            random.shuffle(album_uris)
+            selected = album_uris[:max(10, limit)]
+            try:
+                lookup_result = core.library.lookup(cast("list[Uri]", selected)).get()
+            except Exception:
+                logger.exception("Album lookup failed for artist %s", artist)
+                continue
+            for uri_tracks in lookup_result.values():
+                for t in uri_tracks:
+                    if t.uri and t.uri != track_uri:
+                        similar[t.uri] = t
+        else:
+            a_query = cast("Query[SearchField]", {"artist": [artist]})
+            try:
+                artist_result = core.library.search(a_query, uris=uris).get()
+            except Exception:
+                logger.exception("Artist search failed for %s", artist)
+                continue
+            for batch in artist_result:
+                for t in batch.tracks:
+                    if t.uri and t.uri != track_uri:
+                        similar[t.uri] = t
 
     tracks = list(similar.values())
     random.shuffle(tracks)
@@ -202,15 +308,30 @@ def build_smart_queue_tracks(
             for attr_type, attr_value in potential_attributes:
                 try:
                     if attr_type == "genre":
-                        search_result_tracks = _search(core, "genre", attr_value, uris=uris)
+                        album_uris = _browse_album_uris_by_field(core, "genre", attr_value)
                     elif attr_type == "artist":
-                        search_result_tracks = _search(core, "artist", attr_value, uris=uris)
+                        album_uris = _browse_album_uris_by_field(core, "artist", attr_value)
                     else:
                         continue
 
-                    for t in search_result_tracks:
-                        if t.uri and t.uri != seed_uri and t not in variety:
-                            variety.append(t)
+                    if album_uris:
+                        random.shuffle(album_uris)
+                        needed = max(5, variety_count * 2)
+                        selected = album_uris[:needed]
+                        try:
+                            lookup_result = core.library.lookup(cast("list[Uri]", selected)).get()
+                        except Exception:
+                            logger.exception("Album lookup failed for %s=%s", attr_type, attr_value)
+                            continue
+                        for uri_tracks in lookup_result.values():
+                            for t in uri_tracks:
+                                if t.uri and t.uri != seed_uri and t not in variety:
+                                    variety.append(t)
+                    else:
+                        search_result_tracks = _search(core, attr_type, attr_value, uris=uris)
+                        for t in search_result_tracks:
+                            if t.uri and t.uri != seed_uri and t not in variety:
+                                variety.append(t)
                 except Exception as e:
                     logger.warning("Could not generate variety for %s=%s: %s", attr_type, attr_value, str(e))
 
