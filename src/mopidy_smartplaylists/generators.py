@@ -92,8 +92,7 @@ def _browse_album_uris_by_field(
         refs = core.library.browse(cast("Uri", browse_uri)).get()
         album_uris = []
         for ref in refs:
-            uri = ref.get("uri", "")
-            parsed = urllib.parse.urlparse(uri)
+            parsed = urllib.parse.urlparse(ref.uri)
             params = urllib.parse.parse_qs(parsed.query)
             album_uri = params.get("album", [None])[0]
             if album_uri:
