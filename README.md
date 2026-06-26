@@ -20,7 +20,7 @@ Mopidy extension for generating diverse, full-length smart playlists from a loca
 Drag this link to your bookmarks bar to toggle the Smart Queue:
 
 ```
-javascript:(function(){var u=location.origin.replace(/\/+$/,'');fetch(u+'/smartplaylists/smart-queue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!confirm('Toggle Smart Queue?')})}).then(function(r){return r.json()}).then(function(d){alert('Smart Queue: '+(d.enabled?'On':'Off'))}).catch(function(e){alert('Failed: '+e)})})();
+javascript:(function(){var u=location.origin.replace(/\/+$/,'');fetch(u+'/smartplaylists/smart-queue').then(function(r){return r.json()}).then(function(d){return fetch(u+'/smartplaylists/smart-queue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!d.enabled})})}).then(function(r){return r.json()}).then(function(d){alert('Smart Queue: '+(d.enabled?'On':'Off'))}).catch(function(e){alert('Failed: '+e)})})();
 ```
 
 Works from any page on the same Mopidy host (Iris, smart playlists UI, etc.). Uses `location.origin` and appends `/smartplaylists/smart-queue`.
