@@ -1,0 +1,14 @@
+#+title: Smart Playlists for Mopidy
+
+* Overview
+* Features
+* Issues :mopidy_smartplaylists:smartplaylists:project:personal:mopidy:
+** Backlog [2/2]
+*** DONE Add discography playlist generation for artists of all albums in order :feature:artists:
+:PROPERTIES:
+:ID:       ac32417c-7701-a65b-bd7a-4323a5584802
+:END:
+*** DONE Fork Iris and add button for toggling smartplaylists :feature:
+:PROPERTIES:
+:ID:       9e9f1bc5-fa85-88c0-eaf9-b1c0608849ea
+:END:
