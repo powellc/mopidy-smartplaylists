@@ -180,6 +180,79 @@ def build_artist_mix(
     return _mix_tracks(_search(core, "artist", artist, uris=uris), max_tracks, max_per_album, max_per_artist)
 
 
+def build_artist_discography(
+    core: CoreProxy, artist: str, reverse: bool = False,
+    uris: list[Uri] | None = None,
+) -> list[Track]:
+    browse_uri = f"local:directory?artist={urllib.parse.quote(artist)}"
+    try:
+        refs = core.library.browse(cast("Uri", browse_uri)).get()
+    except Exception:
+        logger.exception("Browse failed for artist %s", artist)
+        refs = []
+
+    albums: list[tuple[str, str, str]] = []
+    pre_fetched: dict[str, list[Track]] = {}
+
+    if refs:
+        for ref in refs:
+            parsed = urllib.parse.urlparse(ref.uri)
+            params = urllib.parse.parse_qs(parsed.query)
+            album_uri = params.get("album", [None])[0]
+            if album_uri:
+                date = params.get("date", [None])[0] or ""
+                name = ref.name or ""
+                albums.append((album_uri, date, name))
+        logger.info("Found %d albums for artist %s via browse", len(albums), artist)
+
+    if not albums:
+        logger.warning("No albums found for artist %s via browse, falling back to search", artist)
+        tracks = _search(core, "artist", artist, uris=uris)
+        if not tracks:
+            return []
+        for t in tracks:
+            au = t.album.uri if t.album and t.album.uri else None
+            if not au:
+                continue
+            if au not in pre_fetched:
+                date = t.album.date or "" if t.album else ""
+                name = t.album.name or "" if t.album else ""
+                albums.append((au, date, name))
+                pre_fetched[au] = []
+            pre_fetched[au].append(t)
+        for album_tracks in pre_fetched.values():
+            album_tracks.sort(key=lambda t: (t.disc_no or 0, t.track_no or 0))
+
+    def _sort_key(item: tuple[str, str, str]) -> tuple:
+        _uri, date, name = item
+        if date:
+            return (0, date, name.lower())
+        return (1, "", name.lower())
+
+    albums.sort(key=_sort_key, reverse=reverse)
+
+    result: list[Track] = []
+    for album_uri, _date, _name in albums:
+        if album_uri in pre_fetched:
+            result.extend(pre_fetched[album_uri])
+            continue
+        try:
+            lookup = core.library.lookup(cast("list[Uri]", [album_uri])).get()
+        except Exception:
+            logger.exception("Album lookup failed for %s", album_uri)
+            continue
+        album_tracks = _flatten_lookup(lookup)
+        album_tracks.sort(key=lambda t: (t.disc_no or 0, t.track_no or 0))
+        result.extend(album_tracks)
+
+    logger.info(
+        "Artist discography for %s: %d tracks across %d albums (%s)",
+        artist, len(result), len(albums),
+        "reverse chronological" if reverse else "chronological",
+    )
+    return result
+
+
 def build_album_mix(core: CoreProxy, album_uri: str) -> list[Track]:
     try:
         tracks = core.library.lookup(cast("list[Uri]", [album_uri])).get()
@@ -462,6 +535,18 @@ def refresh_smart_playlists(core: CoreProxy, config_dict: dict) -> None:
                 continue
             if tracks:
                 save_smart_playlist(core, prefix, f"{artist} Mix", tracks, playlist_dir=playlist_dir)
+
+    artist_discography_raw = config_dict.get("artist_discography", "")
+    if artist_discography_raw:
+        discography_artists = [a.strip() for a in artist_discography_raw.split(",") if a.strip()]
+        for artist in discography_artists:
+            try:
+                tracks = build_artist_discography(core, artist, uris=uris)
+            except Exception:
+                logger.exception("Failed to build artist discography for %s", artist)
+                continue
+            if tracks:
+                save_smart_playlist(core, prefix, f"{artist} - Discography", tracks, playlist_dir=playlist_dir)
 
 
 def _extract_tracks(search_result: list) -> list[Track]:

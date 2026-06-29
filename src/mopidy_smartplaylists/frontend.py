@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING
 import pykka
 from mopidy.core import CoreListener
 
-from mopidy_smartplaylists.generators import build_smart_queue_tracks, refresh_smart_playlists
+from mopidy_smartplaylists.generators import (
+    build_artist_discography,
+    build_smart_queue_tracks,
+    refresh_smart_playlists,
+)
 
 if TYPE_CHECKING:
     from mopidy_smartplaylists.compat import Config, CoreProxy, Uri
@@ -41,7 +45,7 @@ class SmartPlaylistsFrontend(pykka.ThreadingActor, CoreListener):
 
     def on_start(self) -> None:
         section = dict(self.config.get("smartplaylists", {}))
-        has_recipes = any(section.get(k) for k in ("decades", "genres", "artists"))
+        has_recipes = any(section.get(k) for k in ("decades", "genres", "artists", "artist_discography"))
         if has_recipes:
             logger.info("Generating smart playlists from config recipes...")
             refresh_smart_playlists(self.core, section)

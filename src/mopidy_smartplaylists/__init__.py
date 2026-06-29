@@ -19,6 +19,7 @@ class Extension(ext.Extension):
         schema["decades"] = config.String(optional=True)
         schema["genres"] = config.String(optional=True)
         schema["artists"] = config.String(optional=True)
+        schema["artist_discography"] = config.String(optional=True)
         schema["playlist_prefix"] = config.String(optional=True)
         schema["refresh_interval"] = config.Integer(optional=True, minimum=0)
         schema["search_uris"] = config.List(optional=True)

@@ -1,11 +1,12 @@
 from unittest import mock
 
-from mopidy.models import Artist, Playlist, SearchResult, Track
+from mopidy.models import Album, Artist, Playlist, SearchResult, Track
 
 from mopidy_smartplaylists.generators import (
     _extract_tracks,
     _flatten_lookup,
     _sanitize_name,
+    build_artist_discography,
     build_artist_mix,
     build_decade_mix,
     build_genre_mix,
@@ -114,6 +115,213 @@ class TestBuildArtistMix:
         query_arg = core.library.search.call_args[0][0]
         assert query_arg["artist"] == ["Miles Davis"]
         assert result == expected_tracks
+
+
+class TestBuildArtistDiscography:
+    def test_chronological_order_from_browse(self):
+        core = mock.Mock()
+        refs = [
+            mock.Mock(
+                uri="local:directory?album=local:album:late&artist=Test&date=2000",
+                name="Late Album",
+            ),
+            mock.Mock(
+                uri="local:directory?album=local:album:early&artist=Test&date=1990",
+                name="Early Album",
+            ),
+        ]
+        core.library.browse.return_value.get.return_value = refs
+
+        early_album = Album(uri="local:album:early")
+        late_album = Album(uri="local:album:late")
+        early_tracks = [
+            Track(uri="local:track:e1", name="Early 1", album=early_album, disc_no=1, track_no=1),
+            Track(uri="local:track:e2", name="Early 2", album=early_album, disc_no=1, track_no=2),
+        ]
+        late_tracks = [
+            Track(uri="local:track:l1", name="Late 1", album=late_album, disc_no=1, track_no=1),
+        ]
+
+        def lookup_side_effect(uris):
+            result = mock.Mock()
+            results = {}
+            for u in uris:
+                if "early" in u:
+                    results[u] = early_tracks
+                elif "late" in u:
+                    results[u] = late_tracks
+            result.get.return_value = results
+            return result
+
+        core.library.lookup.side_effect = lookup_side_effect
+
+        result = build_artist_discography(core, "Test Artist")
+
+        assert len(result) == 3
+        assert result[0].uri == "local:track:e1"
+        assert result[1].uri == "local:track:e2"
+        assert result[2].uri == "local:track:l1"
+
+    def test_reverse_chronological_order(self):
+        core = mock.Mock()
+        refs = [
+            mock.Mock(
+                uri="local:directory?album=local:album:late&artist=Test&date=2000",
+                name="Late Album",
+            ),
+            mock.Mock(
+                uri="local:directory?album=local:album:early&artist=Test&date=1990",
+                name="Early Album",
+            ),
+        ]
+        core.library.browse.return_value.get.return_value = refs
+
+        early_tracks = [
+            Track(uri="local:track:e1", name="Early 1", disc_no=1, track_no=1),
+        ]
+        late_tracks = [
+            Track(uri="local:track:l1", name="Late 1", disc_no=1, track_no=1),
+        ]
+
+        def lookup_side_effect(uris):
+            result = mock.Mock()
+            results = {}
+            for u in uris:
+                if "early" in u:
+                    results[u] = early_tracks
+                elif "late" in u:
+                    results[u] = late_tracks
+            result.get.return_value = results
+            return result
+
+        core.library.lookup.side_effect = lookup_side_effect
+
+        result = build_artist_discography(core, "Test Artist", reverse=True)
+
+        assert len(result) == 2
+        assert result[0].uri == "local:track:l1"
+        assert result[1].uri == "local:track:e1"
+
+    def test_undated_albums_sorted_last_chronologically(self):
+        core = mock.Mock()
+        refs = [
+            mock.Mock(
+                uri="local:directory?album=local:album:dated&artist=Test&date=2000",
+                name="Dated",
+            ),
+            mock.Mock(
+                uri="local:directory?album=local:album:undated&artist=Test",
+                name="Undated",
+            ),
+        ]
+        core.library.browse.return_value.get.return_value = refs
+
+        dated_tracks = [Track(uri="local:track:d1", name="Dated 1", disc_no=1, track_no=1)]
+        undated_tracks = [Track(uri="local:track:u1", name="Undated 1", disc_no=1, track_no=1)]
+
+        lookups: dict[str, list[Track]] = {
+            "local:album:dated": dated_tracks,
+            "local:album:undated": undated_tracks,
+        }
+
+        def lookup_side_effect(uris):
+            result = mock.Mock()
+            result.get.return_value = {u: lookups.get(u, []) for u in uris}
+            return result
+
+        core.library.lookup.side_effect = lookup_side_effect
+
+        result = build_artist_discography(core, "Test Artist")
+        assert result[0].uri == "local:track:d1"
+        assert result[1].uri == "local:track:u1"
+
+    def test_undated_albums_sorted_first_reverse(self):
+        core = mock.Mock()
+        refs = [
+            mock.Mock(
+                uri="local:directory?album=local:album:dated&artist=Test&date=2000",
+                name="Dated",
+            ),
+            mock.Mock(
+                uri="local:directory?album=local:album:undated&artist=Test",
+                name="Undated",
+            ),
+        ]
+        core.library.browse.return_value.get.return_value = refs
+
+        dated_tracks = [Track(uri="local:track:d1", name="Dated 1", disc_no=1, track_no=1)]
+        undated_tracks = [Track(uri="local:track:u1", name="Undated 1", disc_no=1, track_no=1)]
+
+        lookups: dict[str, list[Track]] = {
+            "local:album:dated": dated_tracks,
+            "local:album:undated": undated_tracks,
+        }
+
+        def lookup_side_effect(uris):
+            result = mock.Mock()
+            result.get.return_value = {u: lookups.get(u, []) for u in uris}
+            return result
+
+        core.library.lookup.side_effect = lookup_side_effect
+
+        result = build_artist_discography(core, "Test Artist", reverse=True)
+        assert result[0].uri == "local:track:u1"
+        assert result[1].uri == "local:track:d1"
+
+    def test_tracks_sorted_by_disc_and_track_number(self):
+        core = mock.Mock()
+        refs = [
+            mock.Mock(
+                uri="local:directory?album=local:album:a&artist=Test&date=2000",
+                name="Album",
+            ),
+        ]
+        core.library.browse.return_value.get.return_value = refs
+
+        album_tracks = [
+            Track(uri="local:track:t2", name="Track 2", disc_no=1, track_no=2),
+            Track(uri="local:track:d1t1", name="Disc 1 Track 1", disc_no=2, track_no=1),
+            Track(uri="local:track:t1", name="Track 1", disc_no=1, track_no=1),
+        ]
+
+        def lookup_side_effect(uris):
+            result = mock.Mock()
+            result.get.return_value = {uris[0]: album_tracks}
+            return result
+
+        core.library.lookup.side_effect = lookup_side_effect
+
+        result = build_artist_discography(core, "Test Artist")
+        assert result[0].uri == "local:track:t1"
+        assert result[1].uri == "local:track:t2"
+        assert result[2].uri == "local:track:d1t1"
+
+    def test_empty_browse_falls_back_to_search(self):
+        core = mock.Mock()
+        core.library.browse.return_value.get.return_value = []
+
+        album_a = Album(uri="local:album:a", date="2000", name="Album A")
+        tracks = [
+            Track(
+                uri="local:track:t1", name="T1",
+                album=album_a, disc_no=1, track_no=1,
+            ),
+        ]
+        core.library.search.return_value.get.return_value = [
+            mock.Mock(tracks=tracks),
+        ]
+
+        result = build_artist_discography(core, "Test Artist")
+        assert len(result) == 1
+        assert result[0].uri == "local:track:t1"
+
+    def test_no_tracks_returns_empty(self):
+        core = mock.Mock()
+        core.library.browse.return_value.get.return_value = []
+        core.library.search.return_value.get.return_value = []
+
+        result = build_artist_discography(core, "Nonexistent")
+        assert result == []
 
 
 class TestBuildInstantMix:

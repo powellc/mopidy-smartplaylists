@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 from mopidy_smartplaylists import frontend as sq_frontend
 from mopidy_smartplaylists.generators import (
     build_album_mix,
+    build_artist_discography,
     build_artist_mix,
     build_genre_mix,
     build_instant_mix,
@@ -102,6 +103,46 @@ class ArtistMixHandler(tornado.web.RequestHandler):
             return
         playlist = save_smart_playlist(
             self.core, self.prefix, f"{artist} Mix", tracks,
+            playlist_dir=self.playlist_dir,
+        )
+        self.write(
+            {
+                "playlist": {
+                    "name": playlist.name if playlist else None,
+                    "uri": playlist.uri if playlist else None,
+                    "tracks": len(tracks),
+                },
+            }
+        )
+
+
+class ArtistDiscographyHandler(tornado.web.RequestHandler):
+    def initialize(
+        self, core: CoreProxy, prefix: str, uris: list[Uri] | None = None,
+        playlist_dir: str | None = None,
+    ) -> None:
+        self.core = core
+        self.prefix = prefix
+        self.uris = uris
+        self.playlist_dir = playlist_dir
+
+    def post(self) -> None:
+        data = json.loads(self.request.body)
+        artist = data.get("artist", "")
+        reverse = bool(data.get("reverse", False))
+        if not artist:
+            self.set_status(400)
+            self.write({"error": "Missing 'artist' in request body"})
+            return
+        tracks = build_artist_discography(
+            self.core, artist, reverse=reverse, uris=self.uris,
+        )
+        if not tracks:
+            self.write({"playlist": None, "tracks": 0})
+            return
+        name_suffix = " (Reverse)" if reverse else ""
+        playlist = save_smart_playlist(
+            self.core, self.prefix, f"{artist} - Discography{name_suffix}", tracks,
             playlist_dir=self.playlist_dir,
         )
         self.write(
@@ -465,6 +506,8 @@ def app_factory(config: Config, core: CoreProxy) -> list[tuple]:
          {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir,
           "max_tracks": max_tracks, "max_per_album": max_per_album,
           "max_per_artist": max_per_artist}),
+        (r"/artist-discography", ArtistDiscographyHandler,
+         {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir}),
         (r"/artist", ArtistMixHandler,
          {"core": core, "prefix": prefix, "uris": uris, "playlist_dir": playlist_dir,
           "max_tracks": max_tracks, "max_per_album": max_per_album,

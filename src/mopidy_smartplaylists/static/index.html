@@ -215,6 +215,21 @@
     </div>
 
     <div class="card">
+      <h3>Artist Discography</h3>
+      <p>Generate a chronological playlist of all albums by an artist.</p>
+      <div class="field" style="flex-direction: column; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem;">
+          <input id="discography-input" type="text" placeholder="e.g. Miles Davis" style="flex: 1;" />
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-primary" onclick="generateDiscography('chronological')" style="flex: 1;">Chronological</button>
+          <button class="btn btn-secondary" onclick="generateDiscography('reverse')" style="flex: 1;">Reverse</button>
+        </div>
+      </div>
+      <div id="discography-result" class="result"></div>
+    </div>
+
+    <div class="card">
       <h3>Album Mix</h3>
       <p>Generate a playlist from an album URI.</p>
       <div class="field">
@@ -318,6 +333,33 @@ async function generate(endpoint, inputId, resultId, bodyFn) {
   const body = Object.fromEntries(Object.entries(bodyFn).map(([k]) => [k, val]));
   try {
     const data = await api("POST", "/" + endpoint, body);
+    if (data.playlist) {
+      result.className = "result success";
+      result.textContent = 'Created "' + data.playlist.name + '" (' + data.playlist.tracks + " tracks)";
+      loadStatus();
+    } else {
+      result.textContent = "No tracks found";
+    }
+  } catch (e) {
+    result.className = "result error";
+    result.textContent = "Error: " + e;
+  }
+}
+
+async function generateDiscography(order) {
+  const input = document.getElementById("discography-input");
+  const result = document.getElementById("discography-result");
+  const val = input.value.trim();
+  if (!val) {
+    result.className = "result error";
+    result.textContent = "Enter an artist name";
+    return;
+  }
+  result.textContent = "Generating...";
+  result.className = "result";
+  const reverse = order === "reverse";
+  try {
+    const data = await api("POST", "/artist-discography", { artist: val, reverse });
     if (data.playlist) {
       result.className = "result success";
       result.textContent = 'Created "' + data.playlist.name + '" (' + data.playlist.tracks + " tracks)";
